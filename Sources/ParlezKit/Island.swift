@@ -116,7 +116,7 @@ struct IslandView: View {
     /// The automatic stop being counted down to, once it is `countdownLead` away or less.
     @State private var countdown: Dictation.AutomaticStop?
 
-    /// How long the busy message stays up, and how long an error or Setup message does.
+    /// How long a confirmation or the busy message stays up, and how long an error or Setup message does.
     static let confirmationDuration: Duration = .seconds(1.5)
     static let messageDuration: Duration = .seconds(3)
     /// Scales the Microphone level (RMS, speech around 0.02...0.2) onto the waveform.
@@ -226,7 +226,9 @@ struct IslandView: View {
             HStack(spacing: 8) {
                 icon?.font(.system(size: 14))
                 title
-                Text(message.detail).font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
+                if !message.detail.isEmpty {
+                    Text(message.detail).font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
+                }
             }
             .lineLimit(1)
             .frame(height: IslandLayout.rowHeight)
@@ -313,6 +315,13 @@ extension Message {
         switch kind {
         case .busy:
             self.init(title: "Still transcribing", detail: "one moment")
+        // How a Dictation ended: a green check for a paste, grey circles otherwise.
+        case .pasted(let words):
+            self.init(icon: "checkmark.circle.fill", tint: .green, title: "Pasted", detail: words == 1 ? "1 word" : "\(words) words")
+        case .cancelled:
+            self.init(icon: "xmark.circle.fill", tint: .white.opacity(0.6), title: "Cancelled", detail: "nothing pasted")
+        case .nothingHeard:
+            self.init(icon: "waveform.circle.fill", tint: .white.opacity(0.6), title: "Nothing heard", detail: "")
         case .setupUnfinished:
             self.init(
                 icon: "exclamationmark.triangle.fill", tint: .yellow, title: "Finish Setup to dictate",

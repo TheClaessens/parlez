@@ -34,7 +34,7 @@ public final class Dictation {
     /// A short-lived signal for the Island. Each one raised is a new value (its `raised` instant differs),
     /// so the Island can react to every raise and decide how long to show it.
     public struct Signal: Equatable, Sendable {
-        public enum Kind: Equatable, Sendable { case busy, setupUnfinished, error(Reason) }
+        public enum Kind: Equatable, Sendable { case busy, setupUnfinished, pasted(words: Int), cancelled, nothingHeard, error(Reason) }
         /// What went wrong; the Island owns the wording.
         public enum Reason: Equatable, Sendable { case microphoneDidNotStart, couldNotTranscribe, pasteFailed }
         public let kind: Kind
@@ -166,9 +166,12 @@ public final class Dictation {
         guard let transcript = try? await transcriber.transcribe(recording) else {
             return raise(.error(.couldNotTranscribe))
         }
-        guard !transcript.allSatisfy(\.isWhitespace) else { return }
+        guard !transcript.allSatisfy(\.isWhitespace) else { return raise(.nothingHeard) }
         lastTranscript = transcript
-        do { try inserter.insert(transcript) } catch { raise(.error(.pasteFailed)) }
+        do {
+            try inserter.insert(transcript)
+            raise(.pasted(words: transcript.split(whereSeparator: \.isWhitespace).count))
+        } catch { raise(.error(.pasteFailed)) }
     }
 
     /// Esc was pressed: cancel a recording Dictation, throwing its Recording away.
@@ -176,6 +179,7 @@ public final class Dictation {
         guard state == .recording else { return }
         _ = microphone.stop()
         state = .idle
+        raise(.cancelled)
     }
 
     private func raise(_ kind: Signal.Kind) {
