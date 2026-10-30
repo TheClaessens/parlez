@@ -13,7 +13,7 @@ cd "$(dirname "$0")/.."
 
 mode="${1:-install}"
 app=build/Parlez.app
-version=0.1.0  # bump before each release
+version=0.2.0  # bump before each release
 min_macos=15.0
 
 swift build -c release --product Parlez
