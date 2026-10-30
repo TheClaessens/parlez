@@ -10,9 +10,9 @@ The core reports which error happened; the Island owns all the wording. Spec: `.
 
 **Status:** ready-for-agent
 
-- [ ] The Dictation core's error signal carries one of a fixed set of reasons (microphone didn't start, couldn't transcribe, paste failed) instead of free text, and the existing error tests assert the reasons.
-- [ ] The Island shows each error with its icon, title and fix line from the spec, for about 3 s.
-- [ ] Setup unfinished shows in amber with its own icon, and busy shows the shake plus "Still transcribing".
-- [ ] Errors, warnings and confirmations differ in icon as well as colour.
-- [ ] Two-line messages fit on a screen with a notch and in the floating pill.
-- [ ] The README hand-check checklist's Setup line says "Finish Setup to dictate".
+- [x] The Dictation core's error signal carries one of a fixed set of reasons (microphone didn't start, couldn't transcribe, paste failed) instead of free text, and the existing error tests assert the reasons.
+- [x] The Island shows each error with its icon, title and fix line from the spec, for about 3 s.
+- [x] Setup unfinished shows in amber with its own icon, and busy shows the shake plus "Still transcribing".
+- [x] Errors, warnings and confirmations differ in icon as well as colour.
+- [x] Two-line messages fit on a screen with a notch and in the floating pill.
+- [x] The README hand-check checklist's Setup line says "Finish Setup to dictate".
