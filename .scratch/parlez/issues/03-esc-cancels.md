@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-- [ ] Core tests: Esc while recording returns to idle with nothing transcribed or inserted.
-- [ ] Core tests: Esc while idle or transcribing changes nothing.
-- [ ] Esc is registered as a global hotkey only while recording and is unregistered as soon as the Dictation leaves recording, however it ends.
+- [x] Core tests: Esc while recording returns to idle with nothing transcribed or inserted.
+- [x] Core tests: Esc while idle or transcribing changes nothing.
+- [x] Esc is registered as a global hotkey only while recording and is unregistered as soon as the Dictation leaves recording, however it ends.
 - [ ] By hand: Esc during a Dictation cancels it; Esc afterwards works normally in other apps.

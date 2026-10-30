@@ -29,9 +29,20 @@ public struct Recording: Sendable {
 public final class Dictation {
     public enum State: Equatable, Sendable { case idle, recording, transcribing }
 
-    public private(set) var state: State = .idle
+    public private(set) var state: State = .idle {
+        didSet {
+            let recording = state == .recording
+            guard recording != (oldValue == .recording) else { return }
+            // However a recording ends (stop, automatic stop, Esc), drop its silence/length tracking.
+            if !recording { silentSince = nil; startedAt = nil; level = 0 }
+            onRecordingChanged?(recording)
+        }
+    }
     /// The latest Microphone level while recording (for the Island's meter); 0 otherwise.
     public private(set) var level: Float = 0
+    /// Called with true when a Dictation starts recording and false when it leaves recording, however it ends.
+    /// The app registers Esc as a global hotkey only in between.
+    @ObservationIgnored public var onRecordingChanged: (@MainActor (Bool) -> Void)?
     /// Kept for "Copy last Transcript".
     public private(set) var lastTranscript: String?
 
@@ -90,14 +101,18 @@ public final class Dictation {
     /// Every stop, manual or automatic, goes through here: transcribe the Recording and insert it.
     private func stop() async {
         state = .transcribing
-        silentSince = nil
-        startedAt = nil
-        level = 0
         let recording = microphone.stop()
         if let transcript = try? await transcriber.transcribe(recording) {
             lastTranscript = transcript
             inserter.insert(transcript)
         }
+        state = .idle
+    }
+
+    /// Esc was pressed: cancel a recording Dictation, throwing its Recording away.
+    public func escPressed() {
+        guard state == .recording else { return }
+        _ = microphone.stop()
         state = .idle
     }
 }
