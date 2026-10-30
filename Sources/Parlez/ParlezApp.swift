@@ -5,7 +5,9 @@ import SwiftUI
 @main
 struct ParlezApp: App {
     init() {
-        let dictation = Dictation(microphone: AudioMicrophone(), transcriber: VozTranscriber(), inserter: PasteInserter())
+        let microphone = AudioMicrophone()
+        let dictation = Dictation(microphone: microphone, transcriber: VozTranscriber(), inserter: PasteInserter())
+        microphone.onLevel = { level in Task { await dictation.microphoneLevel(level) } }
         KeyboardShortcuts.onKeyDown(for: .dictation) {
             Task { await dictation.shortcutPressed() }
         }

@@ -51,6 +51,69 @@ struct DictationTests {
 
         #expect(dictation.lastTranscript == "Second.")
     }
+
+    // MARK: Automatic stop
+
+    let quiet: Float = Dictation.silenceThreshold / 2
+    let speech: Float = Dictation.silenceThreshold * 10
+
+    @Test func levelIsObservableWhileRecordingOnly() async {
+        await dictation.microphoneLevel(0.4)
+        #expect(dictation.level == 0)
+
+        await dictation.shortcutPressed()
+        await dictation.microphoneLevel(0.4)
+        #expect(dictation.level == 0.4)
+
+        await dictation.shortcutPressed()
+        #expect(dictation.level == 0)
+    }
+
+    @Test func thirtySecondsOfSilenceStopsAndInserts() async {
+        transcriber.transcript = "Vergeten."
+        await dictation.shortcutPressed()
+
+        await dictation.microphoneLevel(quiet)
+        clock.now += .seconds(29)
+        await dictation.microphoneLevel(quiet)
+        #expect(dictation.state == .recording)
+
+        clock.now += .seconds(1)
+        await dictation.microphoneLevel(quiet)
+
+        #expect(dictation.state == .idle)
+        #expect(inserter.inserted == ["Vergeten."])
+    }
+
+    @Test func speechResetsTheSilenceCountdown() async {
+        await dictation.shortcutPressed()
+
+        await dictation.microphoneLevel(quiet)
+        clock.now += .seconds(20)
+        await dictation.microphoneLevel(speech)
+        clock.now += .seconds(1)
+        await dictation.microphoneLevel(quiet)
+        clock.now += .seconds(29)
+        await dictation.microphoneLevel(quiet)
+
+        #expect(dictation.state == .recording)
+        #expect(inserter.inserted.isEmpty)
+    }
+
+    @Test func tenMinutesStopsAndInsertsEvenWithoutSilence() async {
+        transcriber.transcript = "Lawaaierig café."
+        await dictation.shortcutPressed()
+
+        clock.now += .seconds(599)
+        await dictation.microphoneLevel(speech)
+        #expect(dictation.state == .recording)
+
+        clock.now += .seconds(1)
+        await dictation.microphoneLevel(speech)
+
+        #expect(dictation.state == .idle)
+        #expect(inserter.inserted == ["Lawaaierig café."])
+    }
 }
 
 // MARK: - Fake adapters
