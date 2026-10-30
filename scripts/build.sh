@@ -14,6 +14,7 @@ cd "$(dirname "$0")/.."
 mode="${1:-install}"
 app=build/Parlez.app
 version=0.1.0  # bump before each release
+min_macos=15.0
 
 swift build -c release --product Parlez
 bin="$(swift build -c release --show-bin-path)"
@@ -23,6 +24,10 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin/Parlez" "$app/Contents/MacOS/Parlez"
 # SwiftPM resource bundles (KeyboardShortcuts, Voz) are looked up in Contents/Resources.
 for bundle in "$bin"/*.bundle; do cp -R "$bundle" "$app/Contents/Resources/"; done
+# The app icon: Assets.car for macOS 26 and later, Parlez.icns for macOS 15 (ADR 0004). actool needs Xcode.
+xcrun actool brand/Parlez.icon --compile "$app/Contents/Resources" --app-icon Parlez --platform macosx \
+    --minimum-deployment-target "$min_macos" --standalone-icon-behavior all \
+    --output-partial-info-plist build/icon-info.plist --output-format human-readable-text
 
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -35,7 +40,9 @@ cat > "$app/Contents/Info.plist" <<PLIST
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$version</string>
     <key>CFBundleVersion</key><string>1</string>
-    <key>LSMinimumSystemVersion</key><string>15.0</string>
+    <key>CFBundleIconFile</key><string>Parlez</string>
+    <key>CFBundleIconName</key><string>Parlez</string>
+    <key>LSMinimumSystemVersion</key><string>$min_macos</string>
     <key>LSUIElement</key><true/>
     <key>NSMicrophoneUsageDescription</key><string>Parlez listens while you dictate and turns your speech into text on this Mac.</string>
 </dict>
