@@ -110,6 +110,7 @@ struct IslandView: View {
     /// True while the latest signal is up, which keeps the Island out even with no Dictation running.
     @State private var showingSignal = false
     @State private var message: String?
+    @State private var confirmation: Confirmation?
     @State private var shakes: CGFloat = 0
     /// The length of the last Recording, so its time stays up, frozen, while it is transcribed.
     @State private var frozenElapsed: Duration = .zero
@@ -117,6 +118,7 @@ struct IslandView: View {
     /// How long a busy shake and an error message stay up.
     static let shakeDuration: Duration = .seconds(0.6)
     static let messageDuration: Duration = .seconds(3)
+    static let confirmationDuration: Duration = .seconds(1.5)
     /// Scales the Microphone level (RMS, speech around 0.02...0.2) onto the waveform.
     /// ponytail: tuned by eye against one built-in mic; adjust if the waveform sits too low or pins.
     static let meterGain: Float = 2.5
@@ -124,6 +126,9 @@ struct IslandView: View {
     private var expanded: Bool {
         appeared && islandIsOut(dictation.state, showingSignal: showingSignal)
     }
+
+    /// Whether a row shows below the notch (or the floating pill widens for it).
+    private var hasRow: Bool { message != nil || confirmation != nil }
 
     private var working: Bool {
         dictation.state == .recording || dictation.state == .transcribing
@@ -137,11 +142,11 @@ struct IslandView: View {
             guard expanded else { return CGSize(width: notch.width + corners, height: notch.height) }
             return CGSize(
                 width: notch.width + 2 * IslandLayout.overhang + corners,
-                height: notch.height + (message == nil ? 0 : IslandLayout.rowHeight))
+                height: notch.height + (hasRow ? IslandLayout.rowHeight : 0))
         }
         guard expanded else { return .zero }
         return CGSize(
-            width: message == nil ? IslandLayout.floatingWidth : IslandLayout.floatingMessageWidth, height: IslandLayout.rowHeight)
+            width: hasRow ? IslandLayout.floatingMessageWidth : IslandLayout.floatingWidth, height: IslandLayout.rowHeight)
     }
 
     var body: some View {
@@ -162,16 +167,25 @@ struct IslandView: View {
         .task(id: dictation.signal) {
             showingSignal = dictation.signal != nil
             message = nil
+            confirmation = nil
             guard let signal = dictation.signal else { return }
+            var duration = Self.messageDuration
             switch signal.kind {
             case .error(let text): message = text
             case .setupUnfinished: message = "Finish Setup"
-            case .busy: withAnimation(.linear(duration: 0.4)) { shakes += 1 }
+            case .busy:
+                withAnimation(.linear(duration: 0.4)) { shakes += 1 }
+                duration = Self.shakeDuration
+            case .pasted(let words): confirmation = .pasted(words: words)
+            case .cancelled: confirmation = .cancelled
+            case .nothingHeard: confirmation = .nothingHeard
             }
-            try? await Task.sleep(for: message == nil ? Self.shakeDuration : Self.messageDuration)
+            if confirmation != nil { duration = Self.confirmationDuration }
+            try? await Task.sleep(for: duration)
             if !Task.isCancelled {
                 showingSignal = false
                 message = nil
+                confirmation = nil
             }
         }
     }
@@ -183,9 +197,12 @@ struct IslandView: View {
                     .frame(height: notch.height)
                     .padding(.horizontal, IslandLayout.topCorner)
                 if let message { messageRow(message) }
+                if let confirmation { confirmationRow(confirmation) }
             }
         } else if let message {
             messageRow(message)
+        } else if let confirmation {
+            confirmationRow(confirmation)
         } else if working {
             workingRow(bars: 7).frame(height: IslandLayout.rowHeight)
         }
@@ -194,6 +211,20 @@ struct IslandView: View {
     private func messageRow(_ message: String) -> some View {
         Text(message).font(.system(size: 12, weight: .medium)).foregroundStyle(.red).lineLimit(1)
             .frame(height: IslandLayout.rowHeight)
+    }
+
+    /// How a Dictation ended: an icon, what happened, and a detail in secondary text.
+    private func confirmationRow(_ confirmation: Confirmation) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: confirmation.icon).font(.system(size: 15)).symbolRenderingMode(.palette)
+                .foregroundStyle(confirmation.glyph, confirmation.circle)
+            Text(confirmation.title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+            if let detail = confirmation.detail {
+                Text(detail).font(.system(size: 13)).foregroundStyle(.white.opacity(0.6))
+            }
+        }
+        .lineLimit(1)
+        .frame(height: IslandLayout.rowHeight)
     }
 
     /// The dot (or spinner) and the elapsed time on the left, the waveform (or shimmer) on the right.
@@ -237,6 +268,39 @@ struct IslandView: View {
             (opacity, height) = (0.2 + 0.8 * peak, 5 * (1 + 0.8 * peak))
         }
         return Capsule().fill(.white.opacity(opacity)).frame(width: 3, height: height)
+    }
+}
+
+/// The Island's icon and copy for each way a Dictation can end.
+private enum Confirmation: Equatable {
+    case pasted(words: Int), cancelled, nothingHeard
+
+    var icon: String {
+        switch self {
+        case .pasted: "checkmark.circle.fill"
+        case .cancelled: "xmark.circle.fill"
+        case .nothingHeard: "waveform.circle.fill"
+        }
+    }
+
+    /// The icon's glyph and the circle behind it: a black check on green after a paste, white on grey otherwise.
+    var glyph: Color { if case .pasted = self { .black } else { .white } }
+    var circle: Color { if case .pasted = self { Color(nsColor: .systemGreen) } else { .white.opacity(0.2) } }
+
+    var title: String {
+        switch self {
+        case .pasted: "Pasted"
+        case .cancelled: "Cancelled"
+        case .nothingHeard: "Nothing heard"
+        }
+    }
+
+    var detail: String? {
+        switch self {
+        case .pasted(let words): words == 1 ? "· 1 word" : "· \(words) words"
+        case .cancelled: "· nothing pasted"
+        case .nothingHeard: nil
+        }
     }
 }
 

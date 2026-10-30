@@ -76,6 +76,7 @@ struct DictationTests {
         #expect(dictation.state == .unavailable)
         #expect(microphone.stops == 1)
         #expect(transcriber.calls == 0)
+        #expect(dictation.signal == nil)
     }
 
     @Test func setupIncompleteWhileTranscribingStillInsertsThenStaysUnavailable() async {
@@ -99,6 +100,14 @@ struct DictationTests {
         await dictate()
 
         #expect(inserter.inserted == ["Ik denk hardop."])
+    }
+
+    @Test func pastingSignalsPastedWithTheWordCount() async {
+        transcriber.transcript = " Ik denk\nhardop,  echt. "
+
+        await dictate()
+
+        #expect(dictation.signal?.kind == .pasted(words: 4))
     }
 
     @Test func lastTranscriptIsKept() async {
@@ -247,6 +256,7 @@ struct DictationTests {
         #expect(transcriber.calls == 0)
         #expect(inserter.inserted.isEmpty)
         #expect(dictation.lastTranscript == nil)
+        #expect(dictation.signal?.kind == .cancelled)
     }
 
     @Test func escWhileIdleChangesNothing() {
@@ -326,6 +336,7 @@ struct DictationTests {
         #expect(transcriber.calls == 0)
         #expect(inserter.inserted.isEmpty)
         #expect(dictation.state == .idle)
+        #expect(dictation.signal == nil)
     }
 
     @Test func microphoneThatFailsToStartSignalsAnError() async {
@@ -346,6 +357,7 @@ struct DictationTests {
         #expect(inserter.inserted == ["Kept."])
         #expect(dictation.lastTranscript == "Kept.")
         #expect(dictation.state == .idle)
+        #expect(dictation.signal?.kind == .nothingHeard)
     }
 
     @Test func pressWhileTranscribingIsIgnoredAndSignalsBusy() async {
