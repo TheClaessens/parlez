@@ -12,6 +12,7 @@ struct DictationTests {
     init() {
         dictation = Dictation(
             microphone: microphone, transcriber: transcriber, inserter: inserter, now: { [clock] in clock.now })
+        dictation.setupCompleted()
     }
 
     /// One whole Dictation, long enough to be kept.
@@ -36,6 +37,24 @@ struct DictationTests {
         transcriber.finish("Hallo")
         await stop.value
         #expect(dictation.state == .idle)
+    }
+
+    // MARK: Setup
+
+    @Test func beforeSetupIsCompleteThePressStartsNothingAndSignalsBusy() async {
+        let dictation = Dictation(
+            microphone: microphone, transcriber: transcriber, inserter: inserter, now: { [clock] in clock.now })
+        #expect(dictation.state == .unavailable)
+
+        await dictation.shortcutPressed()
+
+        #expect(dictation.state == .unavailable)
+        #expect(dictation.signal?.kind == .busy)
+
+        dictation.setupCompleted()
+        #expect(dictation.state == .idle)
+        await dictation.shortcutPressed()
+        #expect(dictation.state == .recording)
     }
 
     @Test func transcriptIsInsertedAtTheCaret() async {

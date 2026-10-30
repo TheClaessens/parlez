@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-- [ ] Core tests: before Setup is complete, a shortcut press starts nothing and raises the busy signal; after completion, it starts a Dictation.
+- [x] Core tests: before Setup is complete, a shortcut press starts nothing and raises the busy signal; after completion, it starts a Dictation.
 - [ ] The Setup window shows the three steps with their status, and moves on as each one is granted or finished.
 - [ ] The model step shows download progress, then loads the model once so the first Dictation is fast.
 - [ ] At launch, if any step is not satisfied, Setup opens at the first unsatisfied step; otherwise it does not appear.

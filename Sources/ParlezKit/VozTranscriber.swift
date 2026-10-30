@@ -1,15 +1,24 @@
 import Voz
 
-/// The Transcriber adapter: wraps Voz.
+/// The Transcriber adapter: wraps Voz. Setup prepares it; until then it has no model to transcribe with.
 @MainActor public final class VozTranscriber: Transcriber {
-    private let voz: Task<Voz, any Error>
+    private var voz: Voz?
 
-    /// Starts loading Voz straight away, downloading the model first if it is missing.
-    public init() {
-        voz = Task { try await Voz() }
+    public init() {}
+
+    /// Whether the model is on disk, so Setup knows whether its model step needs a download.
+    public static var isModelDownloaded: Bool { Voz.isDownloaded() }
+
+    /// Downloads the model if it is missing (reporting the fraction done), then loads it once
+    /// so the first Dictation is fast: ~0.3 s from cache, ~20 s on the first load after a download.
+    public func prepare(progress: @escaping @Sendable (Double) -> Void) async throws {
+        voz = try await Voz(progress: { progress($0.fraction) })
     }
 
     public func transcribe(_ recording: Recording) async throws -> String {
-        try await voz.value.transcribe(samples: recording.samples, sampleRate: recording.sampleRate).text
+        guard let voz else { throw NotPrepared() }
+        return try await voz.transcribe(samples: recording.samples, sampleRate: recording.sampleRate).text
     }
+
+    private struct NotPrepared: Error {}
 }
