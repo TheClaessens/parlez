@@ -29,15 +29,29 @@ public struct Recording: Sendable {
 public final class Dictation {
     public enum State: Equatable, Sendable { case idle, recording, transcribing }
 
+    /// A short-lived signal for the Island. Each one raised is a new value (its `raised` instant differs),
+    /// so the Island can react to every raise and decide how long to show it.
+    public struct Signal: Equatable, Sendable {
+        public enum Kind: Equatable, Sendable { case busy, error(String) }
+        public let kind: Kind
+        public let raised: ContinuousClock.Instant
+    }
+
     public private(set) var state: State = .idle
+    /// The last signal raised; cleared when the next Dictation starts.
+    public private(set) var signal: Signal?
     /// Kept for "Copy last Transcript".
     public private(set) var lastTranscript: String?
+
+    /// A Recording shorter than this is an accidental tap and is thrown away.
+    public static let minimumRecording: Duration = .milliseconds(300)
 
     private let microphone: any Microphone
     private let transcriber: any Transcriber
     private let inserter: any Inserter
-    /// The Clock adapter. Nothing reads it yet; the 0.3 s minimum, silence and 10-minute rules will.
+    /// The Clock adapter.
     private let now: @MainActor () -> ContinuousClock.Instant
+    private var recordingStarted = ContinuousClock.now
 
     public init(
         microphone: any Microphone,
@@ -56,17 +70,32 @@ public final class Dictation {
         switch state {
         case .idle:
             guard (try? microphone.start()) != nil else { return }
+            recordingStarted = now()
+            signal = nil
             state = .recording
         case .recording:
-            state = .transcribing
             let recording = microphone.stop()
-            if let transcript = try? await transcriber.transcribe(recording) {
-                lastTranscript = transcript
-                inserter.insert(transcript)
+            if now() - recordingStarted < Self.minimumRecording {
+                state = .idle
+                return
+            }
+            state = .transcribing
+            do {
+                let transcript = try await transcriber.transcribe(recording)
+                if !transcript.allSatisfy(\.isWhitespace) {
+                    lastTranscript = transcript
+                    inserter.insert(transcript)
+                }
+            } catch {
+                raise(.error("Transcription failed"))
             }
             state = .idle
         case .transcribing:
-            break
+            raise(.busy)
         }
+    }
+
+    private func raise(_ kind: Signal.Kind) {
+        signal = Signal(kind: kind, raised: now())
     }
 }
