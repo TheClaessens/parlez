@@ -50,8 +50,11 @@ public struct IslandLayout: Equatable, Sendable {
 
 /// Whether the Island is out: during a Dictation, or while a signal is showing.
 private func islandIsOut(_ state: Dictation.State, showingSignal: Bool) -> Bool {
-    state == .recording || state == .transcribing || showingSignal
+    state == .recording || state == .transcribing || state == .retouching || showingSignal
 }
+
+/// Retouche's colour wherever it appears on the Island.
+let indigo = Color(red: 0x7D / 255, green: 0x7A / 255, blue: 1)
 
 /// The Island: a borderless, non-activating panel at the top of the screen with the active menu bar.
 /// It only renders the Dictation core's state and signals; it never takes focus or mouse input.
@@ -75,8 +78,8 @@ private func islandIsOut(_ state: Dictation.State, showingSignal: Bool) -> Bool 
 
     private func changed() {
         // Move to the active menu bar's screen when the Island comes out, but not mid-Dictation
-        // (transcribing follows recording, which already placed it).
-        if dictation.state != .transcribing, islandIsOut(dictation.state, showingSignal: dictation.signal != nil) { place() }
+        // (transcribing and retouching follow recording, which already placed it).
+        if dictation.state != .transcribing, dictation.state != .retouching, islandIsOut(dictation.state, showingSignal: dictation.signal != nil) { place() }
         observe()
     }
 
@@ -180,7 +183,7 @@ struct IslandView: View {
             showingSignal = dictation.signal != nil
             message = nil
             guard let signal = dictation.signal else { return }
-            let message = Message(signal.kind)
+            let message = Message(signal.kind, retouching: dictation.state == .retouching)
             self.message = message
             if signal.kind == .busy { withAnimation(.linear(duration: 0.4)) { shakes += 1 } }
             try? await Task.sleep(for: message.duration)
@@ -232,6 +235,9 @@ struct IslandView: View {
                 if !message.detail.isEmpty {
                     Text(message.detail).font(.system(size: 12).monospacedDigit()).foregroundStyle(.white.opacity(0.6))
                 }
+                if !message.tag.isEmpty {
+                    Text(message.tag).font(.system(size: 12, weight: .medium)).foregroundStyle(indigo)
+                }
             }
             .lineLimit(1)
             .frame(height: IslandLayout.rowHeight)
@@ -254,21 +260,30 @@ struct IslandView: View {
     }
 
     /// The dot (or spinner) and the elapsed time on the left, the waveform (or shimmer) on the right.
+    /// Retouching: the twinkling star and "Retouche" on the left, the shimmer in indigo on the right.
     private func workingRow(bars: Int, t: Double) -> some View {
         let recording = dictation.state == .recording
+        let retouching = dictation.state == .retouching
         let level = dictation.automaticStop?.reason == .silence ? 0 : CGFloat(min(1, dictation.level.squareRoot() * Self.meterGain))
         let elapsed: Duration = recording ? dictation.recordingStartedAt.map { ContinuousClock.now - $0 } ?? .zero : frozenElapsed
         return HStack {
-            HStack(spacing: 8) {
-                ZStack { if recording { RecordingDot(t: t) } else { Spinner(t: t) } }.frame(width: 12, height: 12)
-                Text(elapsed.formatted(.time(pattern: .minuteSecond(padMinuteToLength: 1, roundFractionalSeconds: .towardZero))))
-                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(.white.opacity(recording ? 1 : 0.6))
+            if retouching {
+                HStack(spacing: 7) {
+                    Twinkle(t: t).frame(width: 12, height: 12)
+                    Text("Retouche").font(.system(size: 13, weight: .semibold)).foregroundStyle(indigo)
+                }
+            } else {
+                HStack(spacing: 8) {
+                    ZStack { if recording { RecordingDot(t: t) } else { Spinner(t: t) } }.frame(width: 12, height: 12)
+                    Text(elapsed.formatted(.time(pattern: .minuteSecond(padMinuteToLength: 1, roundFractionalSeconds: .towardZero))))
+                        .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(.white.opacity(recording ? 1 : 0.6))
+                }
             }
             Spacer(minLength: 0)
             HStack(spacing: 3) {
                 ForEach(0..<bars, id: \.self) { bar in
-                    Self.bar(bar, t: t, level: recording ? level : nil)
+                    Self.bar(bar, t: t, level: recording ? level : nil, color: retouching ? indigo : .white)
                 }
             }
             .animation(.easeOut(duration: 0.08), value: level)
@@ -278,7 +293,7 @@ struct IslandView: View {
 
     /// One bar of the waveform, driven by the level while recording (a still dot at level 0); without a level, one step of the
     /// shimmer that runs across the bars while transcribing.
-    private static func bar(_ bar: Int, t: Double, level: CGFloat?) -> some View {
+    private static func bar(_ bar: Int, t: Double, level: CGFloat?, color: Color) -> some View {
         let (opacity, height): (Double, CGFloat)
         if let level {
             // Each bar sways at its own pace, so the waveform doesn't move as one block.
@@ -290,12 +305,13 @@ struct IslandView: View {
             let peak = phase < 0.4 ? phase / 0.4 : (1 - phase) / 0.6
             (opacity, height) = (0.2 + 0.8 * peak, 5 * (1 + 0.8 * peak))
         }
-        return Capsule().fill(.white.opacity(opacity)).frame(width: 3, height: height)
+        return Capsule().fill(color.opacity(opacity)).frame(width: 3, height: height)
     }
 }
 
 /// What a message row says: an optional icon in its colour, the title in white, and a detail in grey,
-/// beside the title on one line or underneath it as the fix line; and how long it stays up.
+/// beside the title on one line or underneath it as the fix line, then an optional tag in indigo (one line only);
+/// and how long it stays up.
 /// The Island owns all this wording.
 private struct Message {
     enum Icon { case symbol(String), ring(left: Double) }
@@ -303,6 +319,7 @@ private struct Message {
     var tint: Color = .white
     let title: String
     let detail: String
+    var tag = ""
     var twoLines = false
     var duration: Duration = .seconds(1.5)
 }
@@ -317,13 +334,18 @@ extension Message {
     }
 
     /// Errors are red circles, the Setup step left is an amber triangle; both say what to do on a second line, for 3 s.
-    init(_ kind: Dictation.Signal.Kind) {
+    init(_ kind: Dictation.Signal.Kind, retouching: Bool = false) {
         switch kind {
         case .busy:
-            self.init(title: "Still transcribing", detail: "one moment")
-        // How a Dictation ended: a green check for a paste, grey circles otherwise.
-        case .pasted(let words):
-            self.init(icon: .symbol("checkmark.circle.fill"), tint: .green, title: "Pasted", detail: words == 1 ? "1 word" : "\(words) words")
+            self.init(title: retouching ? "Still retouching" : "Still transcribing", detail: "one moment")
+        // How a Dictation ended: a green check for a paste, grey circles otherwise. A paste that fell back
+        // from Retouche gets a grey outlined check: the words did land, so it isn't an error.
+        case .pasted(_, .skipped):
+            self.init(icon: .symbol("checkmark.circle"), tint: .white.opacity(0.6), title: "Pasted as spoken", detail: "Retouche skipped")
+        case .pasted(let words, let retouche):
+            self.init(
+                icon: .symbol("checkmark.circle.fill"), tint: .green, title: "Pasted", detail: words == 1 ? "1 word" : "\(words) words",
+                tag: retouche == .applied ? "retouched" : "")
         case .cancelled:
             self.init(icon: .symbol("xmark.circle.fill"), tint: .white.opacity(0.6), title: "Cancelled", detail: "nothing pasted")
         case .nothingHeard:
@@ -351,6 +373,16 @@ private struct RecordingDot: View {
         let pulse = min(1, (t / 1.6).truncatingRemainder(dividingBy: 1) / 0.6)
         Circle().fill(.red).frame(width: 8, height: 8)
             .background(Circle().fill(.red.opacity(0.55 * (1 - pulse))).padding(-4.5 * pulse))
+    }
+}
+
+/// Retouche's four-point star, twinkling once every 1.4 s.
+private struct Twinkle: View {
+    let t: Double
+    var body: some View {
+        let phase = (1 - cos(t / 1.4 * 2 * .pi)) / 2  // 0 → 1 → 0
+        Image(systemName: "sparkle").font(.system(size: 12, weight: .semibold)).foregroundStyle(indigo)
+            .scaleEffect(1 - 0.2 * phase).rotationEffect(.degrees(20 * phase)).opacity(1 - 0.3 * phase)
     }
 }
 

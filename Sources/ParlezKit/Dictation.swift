@@ -43,12 +43,16 @@ extension Retoucher {
 @MainActor @Observable
 public final class Dictation {
     /// `unavailable` while Setup is not complete.
-    public enum State: Equatable, Sendable { case unavailable, idle, recording, transcribing }
+    public enum State: Equatable, Sendable { case unavailable, idle, recording, transcribing, retouching }
 
     /// A short-lived signal for the Island. Each one raised is a new value (its `raised` instant differs),
     /// so the Island can react to every raise and decide how long to show it.
     public struct Signal: Equatable, Sendable {
-        public enum Kind: Equatable, Sendable { case busy, setupUnfinished, pasted(words: Int), cancelled, nothingHeard, error(Reason) }
+        public enum Kind: Equatable, Sendable {
+            case busy, setupUnfinished, pasted(words: Int, retouche: Retouche = .notAttempted), cancelled, nothingHeard, error(Reason)
+        }
+        /// How Retouche went for a paste: skipped means it fell back to the Transcript.
+        public enum Retouche: Equatable, Sendable { case notAttempted, applied, skipped }
         /// What went wrong; the Island owns the wording.
         public enum Reason: Equatable, Sendable { case microphoneDidNotStart, couldNotTranscribe, pasteFailed }
         public let kind: Kind
@@ -144,7 +148,7 @@ public final class Dictation {
             await stop()
         case .unavailable:
             raise(.setupUnfinished)
-        case .transcribing:
+        case .transcribing, .retouching:
             raise(.busy)
         }
     }
@@ -184,21 +188,24 @@ public final class Dictation {
             return
         }
         state = .transcribing
-        defer { if state == .transcribing { state = .idle } }
+        defer { if state == .transcribing || state == .retouching { state = .idle } }
         guard var transcript = try? await transcriber.transcribe(recording) else {
             return raise(.error(.couldNotTranscribe))
         }
-        // ponytail: Retouche runs inside transcribing until the Island gets its own retouching state.
-        if retouche == .onDictationShortcut, retoucher.isAvailable,
-            let retouched = try? await retoucher.retouch(transcript), Self.canTrust(retouched, from: transcript)
-        {
-            transcript = retouched
+        var outcome = Signal.Retouche.notAttempted
+        if retouche == .onDictationShortcut, retoucher.isAvailable {
+            if state == .transcribing { state = .retouching }
+            outcome = .skipped
+            if let retouched = try? await retoucher.retouch(transcript), Self.canTrust(retouched, from: transcript) {
+                transcript = retouched
+                outcome = .applied
+            }
         }
         guard !transcript.allSatisfy(\.isWhitespace) else { return raise(.nothingHeard) }
         lastTranscript = transcript
         do {
             try inserter.insert(transcript)
-            raise(.pasted(words: transcript.split(whereSeparator: \.isWhitespace).count))
+            raise(.pasted(words: transcript.split(whereSeparator: \.isWhitespace).count, retouche: outcome))
         } catch { raise(.error(.pasteFailed)) }
     }
 

@@ -484,7 +484,7 @@ struct DictationTests {
 
         #expect(retoucher.calls == [corrected])
         #expect(inserter.inserted == ["The button should be green."])
-        #expect(dictation.signal?.kind == .pasted(words: 5))
+        #expect(dictation.signal?.kind == .pasted(words: 5, retouche: .applied))
         #expect(dictation.lastTranscript == "The button should be green.")
     }
 
@@ -510,6 +510,7 @@ struct DictationTests {
 
         #expect(retoucher.calls.isEmpty)
         #expect(inserter.inserted == [corrected])
+        #expect(dictation.signal?.kind == .pasted(words: 13, retouche: .notAttempted))
     }
 
     @Test func automaticStopIsNotRetouchedWhenRetoucheHasItsOwnShortcut() async {
@@ -553,6 +554,10 @@ struct DictationTests {
 
         #expect(inserter.inserted == [transcript])
         #expect(dictation.lastTranscript == transcript)
+        guard case .pasted(_, .skipped) = dictation.signal?.kind else {
+            Issue.record("expected a paste with Retouche skipped, got \(String(describing: dictation.signal?.kind))")
+            return
+        }
     }
 
     @Test func dutchSelfCorrectionPassesTheFallbackRule() async {
@@ -575,6 +580,7 @@ struct DictationTests {
         #expect(retoucher.calls == [corrected])
         #expect(inserter.inserted == [corrected])
         #expect(dictation.lastTranscript == corrected)
+        #expect(dictation.signal?.kind == .pasted(words: 13, retouche: .skipped))
     }
 
     @Test func anEmptyRetouchedTranscriptInsertsNothingAndSignalsNothingHeard() async {
@@ -605,6 +611,25 @@ struct DictationTests {
         retoucher.finish("The button should be green.")
         await stop.value
         #expect(inserter.inserted == ["The button should be green."])
+        #expect(dictation.state == .idle)
+    }
+
+    @Test func stateGoesFromTranscribingToRetouchingWhileTheRetoucherWorks() async {
+        dictation.retouche = .onDictationShortcut
+        transcriber.holds = true
+        retoucher.holds = true
+        await dictation.shortcutPressed()
+        clock.now += .seconds(1)
+        let stop = Task { await dictation.shortcutPressed() }
+        await transcriber.started()
+        #expect(dictation.state == .transcribing)
+
+        transcriber.finish(corrected)
+        await retoucher.started()
+        #expect(dictation.state == .retouching)
+
+        retoucher.finish("The button should be green.")
+        await stop.value
         #expect(dictation.state == .idle)
     }
 
