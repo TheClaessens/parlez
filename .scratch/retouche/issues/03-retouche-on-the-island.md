@@ -4,11 +4,11 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The Dictation core has a retouching state between transcribing and idle while the Retoucher works; a press during it raises busy.
-- [ ] The `pasted` signal says whether Retouche was not attempted, applied, or skipped.
-- [ ] Both are covered by Dictation tests.
-- [ ] The Island shows the Retouche stage (star and "Retouche" in indigo on the left, indigo shimmer on the right) beside the notch and in the floating pill.
-- [ ] The Island shows "Pasted · N words · retouched" when applied, "Pasted as spoken · Retouche skipped" with a neutral outlined check when skipped, and "Still retouching · one moment" for busy during retouching.
-- [ ] The README hand-check checklist covers the Retouche stage and both confirmations, on the built-in display and an external one.
+- [x] The Dictation core has a retouching state, entered straight from recording by a stop the retouch rule applies to and held until the paste; a press during it raises busy.
+- [x] The `pasted` signal says whether Retouche was not attempted, applied, or skipped.
+- [x] Both are covered by Dictation tests.
+- [x] The Island shows the Retouche stage (star and "Retouche" in indigo on the left, indigo shimmer on the right) beside the notch and in the floating pill.
+- [x] The Island shows "Pasted · N words · retouched" when applied, "Pasted as spoken · Retouche skipped" with a neutral outlined check when skipped, and "Still retouching · one moment" for busy during retouching.
+- [x] The README hand-check checklist covers the Retouche stage and both confirmations, on the built-in display and an external one.

@@ -484,7 +484,7 @@ struct DictationTests {
 
         #expect(retoucher.calls == [corrected])
         #expect(inserter.inserted == ["The button should be green."])
-        #expect(dictation.signal?.kind == .pasted(words: 5))
+        #expect(dictation.signal?.kind == .pasted(words: 5, retouche: .applied))
         #expect(dictation.lastTranscript == "The button should be green.")
     }
 
@@ -510,6 +510,7 @@ struct DictationTests {
 
         #expect(retoucher.calls.isEmpty)
         #expect(inserter.inserted == [corrected])
+        #expect(dictation.signal?.kind == .pasted(words: 13, retouche: .notAttempted))
     }
 
     /// With Retouche on its own shortcut, the shortcut that stops decides, whichever one started.
@@ -530,6 +531,7 @@ struct DictationTests {
 
         #expect(inserter.inserted == [retouches ? "The button should be green." : corrected])
         #expect(dictation.lastTranscript == (retouches ? "The button should be green." : corrected))
+        #expect(dictation.signal?.kind == (retouches ? .pasted(words: 5, retouche: .applied) : .pasted(words: 13, retouche: .notAttempted)))
     }
 
     /// Setting off, or Retouche unavailable: the Retouche shortcut is a plain Dictation shortcut.
@@ -547,7 +549,7 @@ struct DictationTests {
 
         #expect(retoucher.calls.isEmpty)
         #expect(inserter.inserted == [corrected])
-        #expect(dictation.signal?.kind == .pasted(words: 13))
+        #expect(dictation.signal?.kind == .pasted(words: 13, retouche: .notAttempted))
     }
 
     @Test func automaticStopIsNotRetouchedWhenRetoucheHasItsOwnShortcut() async {
@@ -591,6 +593,10 @@ struct DictationTests {
 
         #expect(inserter.inserted == [transcript])
         #expect(dictation.lastTranscript == transcript)
+        guard case .pasted(_, .skipped) = dictation.signal?.kind else {
+            Issue.record("expected a paste with Retouche skipped, got \(String(describing: dictation.signal?.kind))")
+            return
+        }
     }
 
     @Test func dutchSelfCorrectionPassesTheFallbackRule() async {
@@ -613,6 +619,7 @@ struct DictationTests {
         #expect(retoucher.calls == [corrected])
         #expect(inserter.inserted == [corrected])
         #expect(dictation.lastTranscript == corrected)
+        #expect(dictation.signal?.kind == .pasted(words: 13, retouche: .skipped))
     }
 
     @Test func anEmptyRetouchedTranscriptInsertsNothingAndSignalsNothingHeard() async {
@@ -643,6 +650,34 @@ struct DictationTests {
         retoucher.finish("The button should be green.")
         await stop.value
         #expect(inserter.inserted == ["The button should be green."])
+        #expect(dictation.state == .idle)
+    }
+
+    /// A stop the retouch rule applies to shows as retouching straight away, through transcription and Retouche;
+    /// any other stop shows as transcribing.
+    @Test(arguments: [
+        (Dictation.RetoucheSetting.onDictationShortcut, Dictation.Shortcut.dictation, Dictation.State.retouching),
+        (.onOwnShortcut, .retouche, .retouching),
+        (.onOwnShortcut, .dictation, .transcribing),
+        (.off, .dictation, .transcribing),
+    ])
+    func aRetouchedStopIsRetouchingFromTheStart(setting: Dictation.RetoucheSetting, stop: Dictation.Shortcut, working: Dictation.State) async {
+        dictation.retouche = setting
+        transcriber.holds = true
+        retoucher.holds = true
+        await dictation.shortcutPressed()
+        clock.now += .seconds(1)
+        let stopping = Task { await dictation.shortcutPressed(stop) }
+        await transcriber.started()
+        #expect(dictation.state == working)
+
+        transcriber.finish(corrected)
+        if working == .retouching {
+            await retoucher.started()
+            #expect(dictation.state == .retouching)
+            retoucher.finish("The button should be green.")
+        }
+        await stopping.value
         #expect(dictation.state == .idle)
     }
 
