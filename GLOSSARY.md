@@ -20,6 +20,18 @@ _Avoid_: clip, buffer, input
 The text produced from a Recording.
 _Avoid_: output, transcription (for the text), result
 
+**Retouche**:
+The optional step that applies the speaker's self-corrections to a Transcript ("red, oh wait, green" becomes "green"), dropping fillers along the way, without otherwise changing the words.
+_Avoid_: edit, polish, rewrite, cleanup, AI correction
+
+**Retouche shortcut**:
+An optional second key combination that works like the Dictation shortcut, except that a Dictation it stops is retouched.
+_Avoid_: edit shortcut, second hotkey
+
+**Retouched Transcript**:
+The text a Retouche produces from a Transcript. When a Retouche ran, this is what is inserted at the Caret.
+_Avoid_: edited transcript, cleaned text, final text
+
 **Caret**:
 The text insertion point in whichever app and field has keyboard focus when the Transcript is inserted.
 _Avoid_: cursor, pointer
