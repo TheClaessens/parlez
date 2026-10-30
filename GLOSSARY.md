@@ -20,6 +20,10 @@ _Avoid_: clip, buffer, input
 The text produced from a Recording.
 _Avoid_: output, transcription (for the text), result
 
+**Filler**:
+A sound like "uh", "um" or "hmm" that carries no words. Voz leaves most fillers out of the Transcript; Remove fillers and Retouche drop the ones it lets through.
+_Avoid_: disfluency, noise word, hesitation
+
 **Retouche**:
 The optional step that applies the speaker's self-corrections to a Transcript ("red, oh wait, green" becomes "green"), dropping fillers along the way, without otherwise changing the words.
 _Avoid_: edit, polish, rewrite, cleanup, AI correction
