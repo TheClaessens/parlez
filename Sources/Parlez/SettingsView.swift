@@ -3,10 +3,12 @@ import ParlezKit
 import ServiceManagement
 import SwiftUI
 
-/// The Settings window: the Dictation shortcut, Launch at login and Retouche.
+/// The Settings window: the Dictation shortcut, Launch at login, Remove fillers and Retouche.
 struct SettingsView: View {
     let dictation: Dictation
+    let transcriber: VozTranscriber
     let retoucher: any Retoucher
+    @AppStorage(ParlezApp.removeFillersKey) private var removeFillersOn = false
     @State private var loginItemStatus = SMAppService.mainApp.status
     /// Kept while the Retoucher is unavailable, so Retouche comes back on by itself when it can run.
     @AppStorage(ParlezApp.retoucheKey) private var retoucheOn = false
@@ -24,14 +26,18 @@ struct SettingsView: View {
                 Button("Allow Parlez in Login Items…") { SMAppService.openSystemSettingsLoginItems() }
             }
             Divider()
-            Toggle(isOn: $retoucheOn) {
-                HStack(spacing: 6) {
-                    Text("Retouche")
-                    Text("BETA").font(.system(size: 9, weight: .bold)).foregroundStyle(.indigo)
-                        .padding(.horizontal, 4).padding(.vertical, 1)
-                        .background(.indigo.opacity(0.15), in: .rect(cornerRadius: 3))
-                }
+            Toggle(isOn: $removeFillersOn) { HStack(spacing: 6) { Text("Remove fillers"); BetaBadge() } }
+                .toggleStyle(.switch)
+            Text("Leaves out “uh”, “um” and “hmm” that Voz lets through, by listening for them in your Recording. Runs on this Mac. One-time 45 MB download.")
+                .caption()
+            if removeFillersOn, transcriber.fillerModelFailed {
+                Text("The download failed. Check your connection.").font(.caption).foregroundStyle(.red)
+                Button("Try again") { Task { await transcriber.prepareFillerModel() } }
+            } else if removeFillersOn, let progress = transcriber.fillerModelProgress {
+                ProgressView(value: progress)
             }
+            Divider()
+            Toggle(isOn: $retoucheOn) { HStack(spacing: 6) { Text("Retouche"); BetaBadge() } }
             .toggleStyle(.switch)
             .disabled(unavailableReason != nil)
             Text("Applies your self-corrections before pasting (“red, oh wait, green” becomes “green”). Runs on this Mac with Apple Intelligence, and takes a little longer.")
@@ -54,10 +60,13 @@ struct SettingsView: View {
         .onAppear {
             loginItemStatus = SMAppService.mainApp.status
             unavailableReason = retoucher.unavailableReason
+            // Launch only loads a model already on disk; a missing one downloads here, with its progress shown.
+            if removeFillersOn { Task { await transcriber.prepareFillerModel() } }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             unavailableReason = retoucher.unavailableReason
         }
+        .onChange(of: removeFillersOn) { ParlezApp.applyRemoveFillers(to: transcriber, download: true) }
         .onChange(of: retoucheOn) { ParlezApp.applyRetouche(to: dictation) }
         .onChange(of: ownShortcut) { ParlezApp.applyRetouche(to: dictation) }
     }
@@ -70,6 +79,15 @@ struct SettingsView: View {
         }
         // Show what the system actually did, not what was asked.
         loginItemStatus = SMAppService.mainApp.status
+    }
+}
+
+/// The small "beta" label next to a setting still being tried out.
+private struct BetaBadge: View {
+    var body: some View {
+        Text("BETA").font(.system(size: 9, weight: .bold)).foregroundStyle(.indigo)
+            .padding(.horizontal, 4).padding(.vertical, 1)
+            .background(.indigo.opacity(0.15), in: .rect(cornerRadius: 3))
     }
 }
 

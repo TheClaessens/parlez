@@ -13,10 +13,18 @@ let package = Package(
             name: "ParlezKit",
             dependencies: [
                 .product(name: "Voz", package: "desert-ant-core"),
+                .product(name: "Uhm", package: "desert-ant-core"),
                 "KeyboardShortcuts",
             ]
         ),
         .executableTarget(name: "Parlez", dependencies: ["ParlezKit"]),
-        .testTarget(name: "ParlezKitTests", dependencies: ["ParlezKit"]),
+        .testTarget(
+            name: "ParlezKitTests",
+            dependencies: [
+                "ParlezKit",
+                .product(name: "Voz", package: "desert-ant-core"),
+                .product(name: "Uhm", package: "desert-ant-core"),
+            ]
+        ),
     ]
 )

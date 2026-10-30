@@ -4,12 +4,12 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The pure removing-fillers function (Voz text, Voz words, Uhm spans → Transcript) uses `Uhm.reconcileWords`, returns Voz's text unchanged when nothing is dropped, and joins surviving words otherwise; covered by the tests listed in the spec's Testing Decisions.
-- [ ] `VozTranscriber` runs Voz and Uhm concurrently on the Recording when the flag is on and the model is loaded, with `.precision` bias and no type labels; it returns Voz's text when the flag is off, the model isn't loaded, or Uhm throws.
-- [ ] The app owns one `Uhm`, downloads and loads it when the switch is turned on, loads it at launch when the switch is on and the model is on disk, and sets the Transcriber's flag from Settings.
-- [ ] Settings shows the "Remove fillers" switch with its "beta" badge and caption, the download progress, and the failure message with "Try again", as in the spec's Settings decision; stored across launches.
-- [ ] ParlezKit depends on the `Uhm` product; minimum macOS stays 15.
-- [ ] ADR 0003 and the GLOSSARY "Filler" entry are in place (already written with this spec).
-- [ ] The README hand-check checklist covers the items in the spec's Testing Decisions.
+- [x] The pure removing-fillers function (Voz text, Voz words, Uhm spans → Transcript) uses `Uhm.reconcileWords`, returns Voz's text unchanged when nothing is dropped, and joins surviving words otherwise; covered by the tests listed in the spec's Testing Decisions.
+- [x] `VozTranscriber` runs Voz and Uhm concurrently on the Recording when the flag is on and the model is loaded, with `.precision` bias and no type labels; it returns Voz's text when the flag is off, the model isn't loaded, or Uhm throws.
+- [x] The app owns one `Uhm`, downloads and loads it when the switch is turned on, loads it at launch when the switch is on and the model is on disk, and sets the Transcriber's flag from Settings.
+- [x] Settings shows the "Remove fillers" switch with its "beta" badge and caption, the download progress, and the failure message with "Try again", as in the spec's Settings decision; stored across launches.
+- [x] ParlezKit depends on the `Uhm` product; minimum macOS stays 15.
+- [x] ADR 0003 and the GLOSSARY "Filler" entry are in place (already written with this spec).
+- [x] The README hand-check checklist covers the items in the spec's Testing Decisions.
