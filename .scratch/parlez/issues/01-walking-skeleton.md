@@ -8,9 +8,9 @@ Not in this ticket: Setup (rely on the system's own permission prompts), the Isl
 
 **Status:** ready-for-agent
 
-- [ ] One Swift package (tools 6.2+, macOS 15+) with a library target for everything except the app entry point, an executable app target, and a test target using Swift's `Testing` framework; `swift build` and `swift test` pass.
-- [ ] The Dictation core takes events and exposes an observable state (at least idle, recording, transcribing); it makes no direct OS calls and talks only to the four adapters.
-- [ ] Core tests with fake adapters cover: the shortcut toggles idle → recording → transcribing → idle; the Transcript from the fake Transcriber reaches the fake Inserter; the last Transcript is kept.
-- [ ] The Inserter saves the clipboard, pastes with ⌘V, then restores the clipboard after a short delay.
+- [x] One Swift package (tools 6.2+, macOS 15+) with a library target for everything except the app entry point, an executable app target, and a test target using Swift's `Testing` framework; `swift build` and `swift test` pass.
+- [x] The Dictation core takes events and exposes an observable state (at least idle, recording, transcribing); it makes no direct OS calls and talks only to the four adapters.
+- [x] Core tests with fake adapters cover: the shortcut toggles idle → recording → transcribing → idle; the Transcript from the fake Transcriber reaches the fake Inserter; the last Transcript is kept.
+- [x] The Inserter saves the clipboard, pastes with ⌘V, then restores the clipboard after a short delay.
 - [ ] The build/install script assembles `Parlez.app` (agent app with no Dock icon, microphone usage description, bundle identifier `com.thomasclaessens.parlez`), signs it with the Apple Development identity when present and ad-hoc otherwise (overridable by an environment variable), and copies it into Applications.
 - [ ] By hand: in TextEdit, ⌃⌥Space → speak → ⌃⌥Space pastes the Transcript at the Caret, and the clipboard still holds what was there before.
