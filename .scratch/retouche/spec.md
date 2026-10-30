@@ -1,6 +1,6 @@
 # Retouche: apply my self-corrections before the Transcript is inserted
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
