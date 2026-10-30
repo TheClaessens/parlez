@@ -12,7 +12,7 @@ Existing signals keep working as they do today until tickets 02 and 03 replace t
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] The Dictation core exposes when the current Recording started, set while recording and cleared after, covered by Dictation tests.
 - [x] The Island layout frame matches the spec's sizes on a screen with a notch and without one, and the layout tests assert the new frames.
@@ -22,3 +22,7 @@ Existing signals keep working as they do today until tickets 02 and 03 replace t
 - [x] On a screen without a notch the floating pill shows the same content.
 - [x] The README hand-check checklist's Island and level meter lines describe the new look.
 - [ ] By hand: checked on the built-in display and on an external display as main.
+
+## Comments
+
+- 2026-10-30: Merged on `island/integration` (review fixes at 71bc00d). Automated checks pass (35 tests). "By hand" items await verification per the README hand-check checklist.

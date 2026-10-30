@@ -8,7 +8,7 @@ The core reports which error happened; the Island owns all the wording. Spec: `.
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] The Dictation core's error signal carries one of a fixed set of reasons (microphone didn't start, couldn't transcribe, paste failed) instead of free text, and the existing error tests assert the reasons.
 - [x] The Island shows each error with its icon, title and fix line from the spec, for about 3 s.
@@ -16,3 +16,7 @@ The core reports which error happened; the Island owns all the wording. Spec: `.
 - [x] Errors, warnings and confirmations differ in icon as well as colour.
 - [x] Two-line messages fit on a screen with a notch and in the floating pill.
 - [x] The README hand-check checklist's Setup line says "Finish Setup to dictate".
+
+## Comments
+
+- 2026-10-30: Merged on `island/integration` (review fixes at 71bc00d). Automated checks pass (35 tests). "By hand" items await verification per the README hand-check checklist.

@@ -9,7 +9,7 @@ An accidental tap still shows nothing, and starting a new Dictation clears a con
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] The Dictation core raises `pasted` with the Transcript's word count after a successful insert, and not when the paste fails.
 - [x] It raises `cancelled` when Esc cancels a recording, and nothing extra when Setup becomes incomplete mid-recording.
@@ -18,3 +18,7 @@ An accidental tap still shows nothing, and starting a new Dictation clears a con
 - [x] The Island shows each confirmation in a row below the notch (or in the floating pill) for about 1.5 s, then collapses.
 - [x] Starting a new Dictation during a confirmation clears it immediately.
 - [x] The README hand-check checklist covers the three confirmations.
+
+## Comments
+
+- 2026-10-30: Merged on `island/integration` (review fixes at 71bc00d). Automated checks pass (35 tests). "By hand" items await verification per the README hand-check checklist.

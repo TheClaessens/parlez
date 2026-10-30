@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] The Dictation core exposes the earliest pending automatic stop while recording, as an instant plus a reason (silence or length limit), and nil otherwise.
 - [x] Dictation tests cover each part of that value's behaviour:
@@ -15,3 +15,7 @@
 - [x] The Island shows the countdown ring and the right label when the automatic stop is 10 s away or less, and hides it as soon as the stop moves further away.
 - [x] The waveform shows still dots while the level is below the silence threshold.
 - [x] The README hand-check checklist's silence line covers the countdown.
+
+## Comments
+
+- 2026-10-30: Merged on `island/integration` (review fixes at 71bc00d). Automated checks pass (35 tests). "By hand" items await verification per the README hand-check checklist.

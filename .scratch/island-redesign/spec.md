@@ -1,6 +1,6 @@
 # Island redesign: show the Dictation working, and confirm how it ended
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
