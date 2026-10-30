@@ -6,8 +6,8 @@
 
 **Status:** ready-for-agent
 
-- [ ] Core tests: a Recording under 0.3 s is not transcribed and nothing is inserted.
-- [ ] Core tests: an empty Transcript inserts nothing.
-- [ ] Core tests: a shortcut press while transcribing is ignored, the state is unchanged, and a busy signal is raised.
-- [ ] Core tests: a transcription failure raises an error signal, inserts nothing, and returns to idle.
-- [ ] Menu "Copy last Transcript" copies the last Transcript; it is disabled when there is none.
+- [x] Core tests: a Recording under 0.3 s is not transcribed and nothing is inserted.
+- [x] Core tests: an empty Transcript inserts nothing.
+- [x] Core tests: a shortcut press while transcribing is ignored, the state is unchanged, and a busy signal is raised.
+- [x] Core tests: a transcription failure raises an error signal, inserts nothing, and returns to idle.
+- [x] Menu "Copy last Transcript" copies the last Transcript; it is disabled when there is none.

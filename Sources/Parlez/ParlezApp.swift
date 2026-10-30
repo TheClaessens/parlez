@@ -4,6 +4,8 @@ import SwiftUI
 
 @main
 struct ParlezApp: App {
+    let dictation: Dictation
+
     init() {
         let microphone = AudioMicrophone()
         let dictation = Dictation(microphone: microphone, transcriber: VozTranscriber(), inserter: PasteInserter())
@@ -18,11 +20,18 @@ struct ParlezApp: App {
         dictation.onRecordingChanged = { recording in
             if recording { KeyboardShortcuts.enable(.cancelDictation) } else { KeyboardShortcuts.disable(.cancelDictation) }
         }
+        self.dictation = dictation
     }
 
     var body: some Scene {
         MenuBarExtra("Parlez", systemImage: "waveform") {
             SettingsMenuItem()
+            Button("Copy last Transcript") {
+                guard let transcript = dictation.lastTranscript else { return }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(transcript, forType: .string)
+            }
+            .disabled(dictation.lastTranscript == nil)
             Divider()
             Button("Quit Parlez") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")

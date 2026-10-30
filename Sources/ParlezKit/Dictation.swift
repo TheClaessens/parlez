@@ -29,6 +29,14 @@ public struct Recording: Sendable {
 public final class Dictation {
     public enum State: Equatable, Sendable { case idle, recording, transcribing }
 
+    /// A short-lived signal for the Island. Each one raised is a new value (its `raised` instant differs),
+    /// so the Island can react to every raise and decide how long to show it.
+    public struct Signal: Equatable, Sendable {
+        public enum Kind: Equatable, Sendable { case busy, error(String) }
+        public let kind: Kind
+        public let raised: ContinuousClock.Instant
+    }
+
     public private(set) var state: State = .idle {
         didSet {
             let recording = state == .recording
@@ -43,13 +51,18 @@ public final class Dictation {
     /// Called with true when a Dictation starts recording and false when it leaves recording, however it ends.
     /// The app registers Esc as a global hotkey only in between.
     @ObservationIgnored public var onRecordingChanged: (@MainActor (Bool) -> Void)?
+    /// The last signal raised; cleared when the next Dictation starts.
+    public private(set) var signal: Signal?
     /// Kept for "Copy last Transcript".
     public private(set) var lastTranscript: String?
+
+    /// A Recording shorter than this is an accidental tap and is thrown away.
+    public static let minimumRecording: Duration = .milliseconds(300)
 
     private let microphone: any Microphone
     private let transcriber: any Transcriber
     private let inserter: any Inserter
-    /// The Clock adapter, for the silence and length limits (and the 0.3 s minimum).
+    /// The Clock adapter, for the silence and length limits and the 0.3 s minimum.
     private let now: @MainActor () -> ContinuousClock.Instant
     private var startedAt: ContinuousClock.Instant?
     /// When the current run of readings below `silenceThreshold` began; nil while there is sound.
@@ -79,11 +92,12 @@ public final class Dictation {
         case .idle:
             guard (try? microphone.start()) != nil else { return }
             startedAt = now()
+            signal = nil
             state = .recording
         case .recording:
             await stop()
         case .transcribing:
-            break
+            raise(.busy)
         }
     }
 
@@ -98,13 +112,23 @@ public final class Dictation {
         if silentTooLong || now - startedAt >= Self.lengthLimit { await stop() }
     }
 
-    /// Every stop, manual or automatic, goes through here: transcribe the Recording and insert it.
+    /// Every stop, manual or automatic, goes through here: drop an accidental tap, otherwise
+    /// transcribe the Recording and insert a non-empty Transcript.
     private func stop() async {
-        state = .transcribing
         let recording = microphone.stop()
-        if let transcript = try? await transcriber.transcribe(recording) {
-            lastTranscript = transcript
-            inserter.insert(transcript)
+        guard let startedAt, now() - startedAt >= Self.minimumRecording else {
+            state = .idle
+            return
+        }
+        state = .transcribing
+        do {
+            let transcript = try await transcriber.transcribe(recording)
+            if !transcript.allSatisfy(\.isWhitespace) {
+                lastTranscript = transcript
+                inserter.insert(transcript)
+            }
+        } catch {
+            raise(.error("Transcription failed"))
         }
         state = .idle
     }
@@ -114,5 +138,9 @@ public final class Dictation {
         guard state == .recording else { return }
         _ = microphone.stop()
         state = .idle
+    }
+
+    private func raise(_ kind: Signal.Kind) {
+        signal = Signal(kind: kind, raised: now())
     }
 }
