@@ -7,5 +7,5 @@
 **Status:** ready-for-agent
 
 - [ ] Release mode produces a versioned zip of `Parlez.app` that unpacks to a working app.
-- [ ] The README covers install from a release (with "Open Anyway"), build from source, manual updates, the hand-check checklist, the Desert Ant Labs credit and the Voz license link.
-- [ ] An MIT `LICENSE` file is present.
+- [x] The README covers install from a release (with "Open Anyway"), build from source, manual updates, the hand-check checklist, the Desert Ant Labs credit and the Voz license link.
+- [x] An MIT `LICENSE` file is present.
