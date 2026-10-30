@@ -50,11 +50,11 @@ public struct IslandLayout: Equatable, Sendable {
 
 /// Whether the Island is out: during a Dictation, or while a signal is showing.
 private func islandIsOut(_ state: Dictation.State, showingSignal: Bool) -> Bool {
-    state == .recording || state == .transcribing || state == .retouching || showingSignal
+    state == .recording || state.isWorking || showingSignal
 }
 
 /// Retouche's colour wherever it appears on the Island.
-let indigo = Color(red: 0x7D / 255, green: 0x7A / 255, blue: 1)
+let retoucheTint = Color(red: 0x7D / 255, green: 0x7A / 255, blue: 1)
 
 /// The Island: a borderless, non-activating panel at the top of the screen with the active menu bar.
 /// It only renders the Dictation core's state and signals; it never takes focus or mouse input.
@@ -79,7 +79,7 @@ let indigo = Color(red: 0x7D / 255, green: 0x7A / 255, blue: 1)
     private func changed() {
         // Move to the active menu bar's screen when the Island comes out, but not mid-Dictation
         // (transcribing and retouching follow recording, which already placed it).
-        if dictation.state != .transcribing, dictation.state != .retouching, islandIsOut(dictation.state, showingSignal: dictation.signal != nil) { place() }
+        if !dictation.state.isWorking, islandIsOut(dictation.state, showingSignal: dictation.signal != nil) { place() }
         observe()
     }
 
@@ -236,7 +236,7 @@ struct IslandView: View {
                     Text(message.detail).font(.system(size: 12).monospacedDigit()).foregroundStyle(.white.opacity(0.6))
                 }
                 if !message.tag.isEmpty {
-                    Text(message.tag).font(.system(size: 12, weight: .medium)).foregroundStyle(indigo)
+                    Text(message.tag).font(.system(size: 12, weight: .medium)).foregroundStyle(retoucheTint)
                 }
             }
             .lineLimit(1)
@@ -270,7 +270,7 @@ struct IslandView: View {
             if retouching {
                 HStack(spacing: 7) {
                     Twinkle(t: t).frame(width: 12, height: 12)
-                    Text("Retouche").font(.system(size: 13, weight: .semibold)).foregroundStyle(indigo)
+                    Text("Retouche").font(.system(size: 13, weight: .semibold)).foregroundStyle(retoucheTint)
                 }
             } else {
                 HStack(spacing: 8) {
@@ -283,7 +283,7 @@ struct IslandView: View {
             Spacer(minLength: 0)
             HStack(spacing: 3) {
                 ForEach(0..<bars, id: \.self) { bar in
-                    Self.bar(bar, t: t, level: recording ? level : nil, color: retouching ? indigo : .white)
+                    Self.bar(bar, t: t, level: recording ? level : nil, color: retouching ? retoucheTint : .white)
                 }
             }
             .animation(.easeOut(duration: 0.08), value: level)
@@ -381,7 +381,7 @@ private struct Twinkle: View {
     let t: Double
     var body: some View {
         let phase = (1 - cos(t / 1.4 * 2 * .pi)) / 2  // 0 → 1 → 0
-        Image(systemName: "sparkle").font(.system(size: 12, weight: .semibold)).foregroundStyle(indigo)
+        Image(systemName: "sparkle").font(.system(size: 12, weight: .semibold)).foregroundStyle(retoucheTint)
             .scaleEffect(1 - 0.2 * phase).rotationEffect(.degrees(20 * phase)).opacity(1 - 0.3 * phase)
     }
 }

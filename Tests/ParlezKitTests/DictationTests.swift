@@ -577,14 +577,15 @@ struct DictationTests {
         #expect(inserter.inserted == [corrected])
     }
 
-    /// Runaway outputs from the prototype (`prototype/edit-spike`, RESULTS.md): an email, an answer, a translation.
+    /// Runaway Retouched Transcripts from the prototype (`prototype/edit-spike`, RESULTS.md): an email, an answer,
+    /// a translation.
     @Test(arguments: [
         ("Write an email to Sam saying the release is delayed until Friday.",
-         "Subject: Release delayed\n\nHi Sam,\n\nThe release is delayed until Friday.\n\nBest regards"),
-        ("What's the capital of France?", "Paris"),
-        ("De knop moet rood zijn. Oh nee wacht, de knop moet groen zijn.", "The button should be green."),
+         "Subject: Release delayed\n\nHi Sam,\n\nThe release is delayed until Friday.\n\nBest regards", 12),
+        ("What's the capital of France?", "Paris", 5),
+        ("De knop moet rood zijn. Oh nee wacht, de knop moet groen zijn.", "The button should be green.", 13),
     ])
-    func aRetouchedTranscriptThatAddsWordsOrLineBreaksFallsBackToTheTranscript(transcript: String, retouched: String) async {
+    func aRetouchedTranscriptThatAddsWordsOrLineBreaksFallsBackToTheTranscript(transcript: String, retouched: String, words: Int) async {
         dictation.retouche = .onDictationShortcut
         transcriber.transcript = transcript
         retoucher.retouched = retouched
@@ -593,10 +594,32 @@ struct DictationTests {
 
         #expect(inserter.inserted == [transcript])
         #expect(dictation.lastTranscript == transcript)
-        guard case .pasted(_, .skipped) = dictation.signal?.kind else {
-            Issue.record("expected a paste with Retouche skipped, got \(String(describing: dictation.signal?.kind))")
-            return
-        }
+        #expect(dictation.signal?.kind == .pasted(words: words, retouche: .skipped))
+    }
+
+    /// No words but not empty either: not a Retouche of what was said.
+    @Test(arguments: ["…", "."])
+    func aRetouchedTranscriptWithNoWordsFallsBackToTheTranscript(retouched: String) async {
+        dictation.retouche = .onDictationShortcut
+        transcriber.transcript = "Um, uh."
+        retoucher.retouched = retouched
+
+        await dictate()
+
+        #expect(inserter.inserted == ["Um, uh."])
+        #expect(dictation.signal?.kind == .pasted(words: 2, retouche: .skipped))
+    }
+
+    @Test func anEmptyTranscriptIsNotRetouched() async {
+        dictation.retouche = .onDictationShortcut
+        transcriber.transcript = " "
+
+        await dictate()
+
+        #expect(retoucher.calls.isEmpty)
+        #expect(inserter.inserted.isEmpty)
+        #expect(dictation.signal?.kind == .nothingHeard)
+        #expect(dictation.state == .idle)
     }
 
     @Test func dutchSelfCorrectionPassesTheFallbackRule() async {

@@ -4,7 +4,7 @@ Parlez's original spec ruled out any rewriting of the Transcript. We now add Ret
 
 ## Considered options
 
-- **Apple's on-device model (chosen).** The prototype (branch `prototype/edit-spike`, see its `VERDICT.md`) applied 5 of 6 self-corrections exactly, in English, Dutch and mixed, and left clean text alone. It sometimes acts on the content (a dictated "write an email…" became an email), so a Retouched Transcript that adds words or line breaks is discarded for the Transcript. It can also cut more than it should, which no check catches.
+- **Apple's on-device model (chosen).** The prototype (branch `prototype/edit-spike`, see its `VERDICT.md`) applied 5 of 6 self-corrections exactly, in English, Dutch and mixed, and left clean text alone. It sometimes acts on the content (a dictated "write an email…" became an email), so a Retouched Transcript that adds line breaks, or fewer than 90 % of whose words appear in the Transcript, is discarded for the Transcript. It can also cut more than it should, which no check catches.
 - **A cloud model (Claude, Apple's Private Cloud Compute).** Better edits, but the text leaves the Mac, which breaks the reason Parlez exists. Private Cloud Compute also failed from an unbundled tool.
 - **Desert Ant Labs' Uhm.** Detects fillers from the audio only; it does not handle self-corrections.
 

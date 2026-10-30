@@ -43,16 +43,20 @@ extension Retoucher {
 @MainActor @Observable
 public final class Dictation {
     /// `unavailable` while Setup is not complete.
-    public enum State: Equatable, Sendable { case unavailable, idle, recording, transcribing, retouching }
+    public enum State: Equatable, Sendable {
+        case unavailable, idle, recording, transcribing, retouching
+        /// Between the stop and the insert: transcribing or retouching.
+        public var isWorking: Bool { self == .transcribing || self == .retouching }
+    }
 
     /// A short-lived signal for the Island. Each one raised is a new value (its `raised` instant differs),
     /// so the Island can react to every raise and decide how long to show it.
     public struct Signal: Equatable, Sendable {
         public enum Kind: Equatable, Sendable {
-            case busy, setupUnfinished, pasted(words: Int, retouche: Retouche = .notAttempted), cancelled, nothingHeard, error(Reason)
+            case busy, setupUnfinished, pasted(words: Int, retouche: RetoucheOutcome = .notAttempted), cancelled, nothingHeard, error(Reason)
         }
         /// How Retouche went for a paste: skipped means it fell back to the Transcript.
-        public enum Retouche: Equatable, Sendable { case notAttempted, applied, skipped }
+        public enum RetoucheOutcome: Equatable, Sendable { case notAttempted, applied, skipped }
         /// What went wrong; the Island owns the wording.
         public enum Reason: Equatable, Sendable { case microphoneDidNotStart, couldNotTranscribe, pasteFailed }
         public let kind: Kind
@@ -123,6 +127,8 @@ public final class Dictation {
     public static let silenceThreshold: Float = 0.01
     public static let silenceLimit: Duration = .seconds(30)
     public static let lengthLimit: Duration = .seconds(10 * 60)
+    /// The share of a Retouched Transcript's words that must come from the Transcript for it to be trusted.
+    public static let retouchedWordsFromTranscript = 0.9
 
     public init(
         microphone: any Microphone,
@@ -191,14 +197,14 @@ public final class Dictation {
             return
         }
         // A retouched stop is the Retouche stage straight away, covering transcription too.
-        let retouching = shouldRetouche(stoppedBy: shortcut) && retoucher.isAvailable
+        let retouching = retouches(stoppedBy: shortcut) && retoucher.isAvailable
         state = retouching ? .retouching : .transcribing
-        defer { if state == .transcribing || state == .retouching { state = .idle } }
+        defer { if state.isWorking { state = .idle } }
         guard var transcript = try? await transcriber.transcribe(recording) else {
             return raise(.error(.couldNotTranscribe))
         }
-        var outcome = Signal.Retouche.notAttempted
-        if retouching {
+        var outcome = Signal.RetoucheOutcome.notAttempted
+        if retouching, !transcript.allSatisfy(\.isWhitespace) {
             outcome = .skipped
             if let retouched = try? await retoucher.retouch(transcript), Self.canTrust(retouched, from: transcript) {
                 transcript = retouched
@@ -215,20 +221,23 @@ public final class Dictation {
 
     /// The retouch rule: with Retouche on the Dictation shortcut every stop is retouched; on its own shortcut,
     /// only a stop by the Retouche shortcut. (The Retoucher must also be available.)
-    private func shouldRetouche(stoppedBy shortcut: Shortcut) -> Bool {
+    private func retouches(stoppedBy shortcut: Shortcut) -> Bool {
         retouche == .onDictationShortcut || (retouche == .onOwnShortcut && shortcut == .retouche)
     }
 
     /// The fallback rule (from the prototype): a Retouche only deletes, so a Retouched Transcript that adds
     /// line breaks, or whose words are less than 90 % from the Transcript, ran away (an email, an answer,
     /// a translation) and the Transcript is inserted instead. An empty one is trusted: everything was filler.
+    /// One with no words that isn't empty ("…") is not.
     private static func canTrust(_ retouched: String, from transcript: String) -> Bool {
         let lineBreaks = { (text: String) in text.filter(\.isNewline).count }
         let words = { (text: String) in text.lowercased().split { !$0.isLetter && !$0.isNumber && $0 != "'" } }
         let spoken = Set(words(transcript))
-        let out = words(retouched)
+        let retouchedWords = words(retouched)
+        if retouchedWords.isEmpty { return retouched.allSatisfy(\.isWhitespace) }
         return lineBreaks(retouched) <= lineBreaks(transcript)
-            && Double(out.filter(spoken.contains).count) >= 0.9 * Double(out.count)
+            && Double(retouchedWords.filter(spoken.contains).count)
+                >= retouchedWordsFromTranscript * Double(retouchedWords.count)
     }
 
     /// Esc was pressed: cancel a recording Dictation, throwing its Recording away.

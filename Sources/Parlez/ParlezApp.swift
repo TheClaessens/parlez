@@ -30,7 +30,7 @@ struct ParlezApp: App {
         }
         KeyboardShortcuts.disable(.cancelDictation)
         // After `onKeyDown`, which registers the Retouche shortcut whether or not it is wanted.
-        SettingsView.applyRetouche(to: dictation)
+        Self.applyRetouche(to: dictation)
         dictation.onRecordingChanged = { recording in
             if recording { KeyboardShortcuts.enable(.cancelDictation) } else { KeyboardShortcuts.disable(.cancelDictation) }
             // Time passing, so the automatic stops still happen if the Microphone stops sending levels.
@@ -46,6 +46,19 @@ struct ParlezApp: App {
         island = Island(dictation: dictation)
         self.setup = setup
         setup.start()
+    }
+
+    static let retoucheKey = "retouche"
+    static let ownShortcutKey = "retoucheOwnShortcut"
+
+    /// Hands the stored Retouche settings to the Dictation core, and registers the Retouche shortcut only while
+    /// Retouche is on with its own shortcut. It stays registered while the Retoucher is unavailable: the core
+    /// then treats it as a plain Dictation shortcut.
+    static func applyRetouche(to dictation: Dictation) {
+        let defaults = UserDefaults.standard
+        let on = defaults.bool(forKey: retoucheKey), own = defaults.bool(forKey: ownShortcutKey)
+        dictation.retouche = !on ? .off : own ? .onOwnShortcut : .onDictationShortcut
+        if on && own { KeyboardShortcuts.enable(.retouche) } else { KeyboardShortcuts.disable(.retouche) }
     }
 
     var body: some Scene {
