@@ -6,12 +6,12 @@
 
 **Status:** ready-for-agent
 
-- [ ] The Dictation core exposes the earliest pending automatic stop while recording, as an instant plus a reason (silence or length limit), and nil otherwise.
-- [ ] Dictation tests cover each part of that value's behaviour:
+- [x] The Dictation core exposes the earliest pending automatic stop while recording, as an instant plus a reason (silence or length limit), and nil otherwise.
+- [x] Dictation tests cover each part of that value's behaviour:
   - it reports the length limit while there is sound;
   - it switches to the silence stop when silence starts, and back when sound returns;
   - it is nil outside recording;
   - the automatic stop happens at the instant it reported.
-- [ ] The Island shows the countdown ring and the right label when the automatic stop is 10 s away or less, and hides it as soon as the stop moves further away.
-- [ ] The waveform shows still dots while the level is below the silence threshold.
-- [ ] The README hand-check checklist's silence line covers the countdown.
+- [x] The Island shows the countdown ring and the right label when the automatic stop is 10 s away or less, and hides it as soon as the stop moves further away.
+- [x] The waveform shows still dots while the level is below the silence threshold.
+- [x] The README hand-check checklist's silence line covers the countdown.

@@ -113,6 +113,8 @@ struct IslandView: View {
     @State private var shakes: CGFloat = 0
     /// The length of the last Recording, so its time stays up, frozen, while it is transcribed.
     @State private var frozenElapsed: Duration = .zero
+    /// The automatic stop being counted down to, once it is `countdownLead` away or less.
+    @State private var countdown: Dictation.AutomaticStop?
 
     /// How long a busy shake and an error message stay up.
     static let shakeDuration: Duration = .seconds(0.6)
@@ -120,6 +122,8 @@ struct IslandView: View {
     /// Scales the Microphone level (RMS, speech around 0.02...0.2) onto the waveform.
     /// ponytail: tuned by eye against one built-in mic; adjust if the waveform sits too low or pins.
     static let meterGain: Float = 2.5
+    /// How long before an automatic stop its countdown shows.
+    static let countdownLead: Duration = .seconds(10)
 
     private var expanded: Bool {
         appeared && islandIsOut(dictation.state, showingSignal: showingSignal)
@@ -137,12 +141,14 @@ struct IslandView: View {
             guard expanded else { return CGSize(width: notch.width + corners, height: notch.height) }
             return CGSize(
                 width: notch.width + 2 * IslandLayout.overhang + corners,
-                height: notch.height + (message == nil ? 0 : IslandLayout.rowHeight))
+                height: notch.height + (hasRow ? IslandLayout.rowHeight : 0))
         }
         guard expanded else { return .zero }
         return CGSize(
-            width: message == nil ? IslandLayout.floatingWidth : IslandLayout.floatingMessageWidth, height: IslandLayout.rowHeight)
+            width: !hasRow ? IslandLayout.floatingWidth : IslandLayout.floatingMessageWidth, height: IslandLayout.rowHeight)
     }
+
+    private var hasRow: Bool { message != nil || countdown != nil }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -158,6 +164,12 @@ struct IslandView: View {
         .onAppear { appeared = true }
         .onChange(of: dictation.recordingStartedAt) { started, _ in
             if let started { frozenElapsed = ContinuousClock.now - started }
+        }
+        .task(id: dictation.automaticStop) {
+            countdown = nil
+            guard let stop = dictation.automaticStop else { return }
+            try? await Task.sleep(until: stop.at - Self.countdownLead, clock: .continuous)
+            if !Task.isCancelled { countdown = stop }
         }
         .task(id: dictation.signal) {
             showingSignal = dictation.signal != nil
@@ -182,10 +194,12 @@ struct IslandView: View {
                 ZStack { if working { workingRow(bars: 9) } }
                     .frame(height: notch.height)
                     .padding(.horizontal, IslandLayout.topCorner)
-                if let message { messageRow(message) }
+                if let message { messageRow(message) } else if let countdown { countdownRow(countdown) }
             }
         } else if let message {
             messageRow(message)
+        } else if let countdown {
+            countdownRow(countdown)
         } else if working {
             workingRow(bars: 7).frame(height: IslandLayout.rowHeight)
         }
@@ -196,10 +210,30 @@ struct IslandView: View {
             .frame(height: IslandLayout.rowHeight)
     }
 
+    /// An amber ring that runs out with the seconds left, and what is about to stop the Dictation.
+    private func countdownRow(_ stop: Dictation.AutomaticStop) -> some View {
+        TimelineView(.animation) { _ in
+            let left = max(.zero, stop.at - ContinuousClock.now)
+            HStack(spacing: 6) {
+                ZStack {
+                    Circle().stroke(.yellow.opacity(0.25), lineWidth: 2)
+                    Circle().trim(from: 0, to: left / Self.countdownLead).stroke(.yellow, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                }
+                .frame(width: 14, height: 14)
+                Text(stop.reason == .silence ? "No speech" : "Time limit").foregroundStyle(.white)
+                Text("· stopping in \(Int((left / .seconds(1)).rounded(.up))) s").foregroundStyle(.white.opacity(0.6))
+            }
+            .font(.system(size: 12, weight: .medium).monospacedDigit())
+            .lineLimit(1)
+        }
+        .frame(height: IslandLayout.rowHeight)
+    }
+
     /// The dot (or spinner) and the elapsed time on the left, the waveform (or shimmer) on the right.
     private func workingRow(bars: Int) -> some View {
         let recording = dictation.state == .recording
-        let level = CGFloat(min(1, dictation.level.squareRoot() * Self.meterGain))
+        let level = dictation.level < Dictation.silenceThreshold ? 0 : CGFloat(min(1, dictation.level.squareRoot() * Self.meterGain))
         return TimelineView(.animation) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
             let elapsed: Duration = recording ? dictation.recordingStartedAt.map { ContinuousClock.now - $0 } ?? .zero : frozenElapsed
@@ -222,7 +256,7 @@ struct IslandView: View {
         }
     }
 
-    /// One bar of the waveform, driven by the level while recording; without a level, one step of the
+    /// One bar of the waveform, driven by the level while recording (a still dot at level 0); without a level, one step of the
     /// shimmer that runs across the bars while transcribing.
     private static func bar(_ bar: Int, t: Double, level: CGFloat?) -> some View {
         let (opacity, height): (Double, CGFloat)
@@ -230,7 +264,7 @@ struct IslandView: View {
             // Each bar sways at its own pace, so the waveform doesn't move as one block.
             let pace = [0.82, 0.64, 0.95, 0.58, 0.77, 1.02, 0.69, 0.88, 0.73][bar % 9]
             let sway = 0.6 + 0.4 * sin(t * 2 * .pi / pace + Double(bar))
-            (opacity, height) = (1, 3 + 14 * level * sway)
+            (opacity, height) = level == 0 ? (0.35, 3) : (1, 3 + 14 * level * sway)
         } else {
             let phase = (t - Double(bar) * 0.08).truncatingRemainder(dividingBy: 1)
             let peak = phase < 0.4 ? phase / 0.4 : (1 - phase) / 0.6

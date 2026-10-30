@@ -236,6 +236,62 @@ struct DictationTests {
         #expect(inserter.inserted.count == 1)
     }
 
+    @Test func automaticStopIsTheLengthLimitWhileThereIsSound() async {
+        let start = clock.now
+        await dictation.shortcutPressed()
+        clock.now += .seconds(5)
+        await dictation.microphoneLevel(speech)
+
+        #expect(dictation.automaticStop == .init(at: start + .seconds(600), reason: .lengthLimit))
+    }
+
+    @Test func automaticStopSwitchesToTheSilenceStopWhileSilentAndBackWhenSoundReturns() async {
+        let start = clock.now
+        await dictation.shortcutPressed()
+        clock.now += .seconds(5)
+        await dictation.microphoneLevel(quiet)
+        clock.now += .seconds(10)
+        await dictation.microphoneLevel(quiet)
+
+        #expect(dictation.automaticStop == .init(at: start + .seconds(35), reason: .silence))
+
+        await dictation.microphoneLevel(speech)
+
+        #expect(dictation.automaticStop == .init(at: start + .seconds(600), reason: .lengthLimit))
+    }
+
+    @Test func automaticStopIsNilOutsideRecording() async {
+        #expect(dictation.automaticStop == nil)
+
+        await dictation.shortcutPressed()
+        clock.now += .seconds(1)
+        transcriber.holds = true
+        let stop = Task { await dictation.shortcutPressed() }
+        await transcriber.started()
+        #expect(dictation.automaticStop == nil)
+
+        transcriber.finish("Klaar.")
+        await stop.value
+        #expect(dictation.automaticStop == nil)
+    }
+
+    @Test(arguments: [true, false])
+    func theAutomaticStopHappensAtTheInstantItReported(silent: Bool) async {
+        await dictation.shortcutPressed()
+        await dictation.microphoneLevel(silent ? quiet : speech)
+        let reported = dictation.automaticStop
+        #expect(reported?.reason == (silent ? .silence : .lengthLimit))
+
+        clock.now = reported!.at - .milliseconds(1)
+        await dictation.tick()
+        #expect(dictation.state == .recording)
+
+        clock.now = reported!.at
+        await dictation.tick()
+        #expect(dictation.state == .idle)
+        #expect(inserter.inserted.count == 1)
+    }
+
     // MARK: Esc
     @Test func escWhileRecordingCancelsWithNothingTranscribedOrInserted() async {
         await dictation.shortcutPressed()

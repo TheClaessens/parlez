@@ -39,6 +39,17 @@ public final class Dictation {
         public let raised: ContinuousClock.Instant
     }
 
+    /// When a recording Dictation will stop by itself, and why.
+    public struct AutomaticStop: Equatable, Sendable {
+        public enum Reason: Equatable, Sendable { case silence, lengthLimit }
+        public let at: ContinuousClock.Instant
+        public let reason: Reason
+        public init(at: ContinuousClock.Instant, reason: Reason) {
+            self.at = at
+            self.reason = reason
+        }
+    }
+
     public private(set) var state: State = .unavailable {
         didSet {
             let recording = state == .recording
@@ -52,6 +63,13 @@ public final class Dictation {
     public private(set) var level: Float = 0
     /// When the current Recording started (for the Island's elapsed time); nil while not recording.
     public private(set) var recordingStartedAt: ContinuousClock.Instant?
+    /// The earliest pending automatic stop while recording; nil otherwise.
+    public var automaticStop: AutomaticStop? {
+        guard state == .recording, let recordingStartedAt else { return nil }
+        let lengthStop = AutomaticStop(at: recordingStartedAt + Self.lengthLimit, reason: .lengthLimit)
+        guard let silentSince, silentSince + Self.silenceLimit < lengthStop.at else { return lengthStop }
+        return AutomaticStop(at: silentSince + Self.silenceLimit, reason: .silence)
+    }
     /// Called with true when a Dictation starts recording and false when it leaves recording, however it ends.
     /// The app registers Esc as the cancel shortcut only in between.
     @ObservationIgnored public var onRecordingChanged: (@MainActor (Bool) -> Void)?
@@ -130,10 +148,7 @@ public final class Dictation {
     /// Time passing: the app calls this on a timer while recording, so the automatic stops still
     /// happen when the Microphone stalls and sends no readings.
     public func tick() async {
-        guard state == .recording, let recordingStartedAt else { return }
-        let now = now()
-        let silentTooLong = silentSince.map { now - $0 >= Self.silenceLimit } ?? false
-        if silentTooLong || now - recordingStartedAt >= Self.lengthLimit { await stop() }
+        if let automaticStop, now() >= automaticStop.at { await stop() }
     }
 
     /// Every stop, manual or automatic, goes through here: drop an accidental tap, otherwise
