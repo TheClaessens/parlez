@@ -20,8 +20,11 @@ struct ParlezApp: App {
 
     var body: some Scene {
         MenuBarExtra("Parlez", systemImage: "waveform") {
+            SettingsMenuItem()
+            Divider()
             Button("Quit Parlez") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
         }
+        Settings { SettingsView() }
     }
 }
