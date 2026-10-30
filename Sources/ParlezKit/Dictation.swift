@@ -34,7 +34,9 @@ public final class Dictation {
     /// A short-lived signal for the Island. Each one raised is a new value (its `raised` instant differs),
     /// so the Island can react to every raise and decide how long to show it.
     public struct Signal: Equatable, Sendable {
-        public enum Kind: Equatable, Sendable { case busy, setupUnfinished, error(String) }
+        public enum Kind: Equatable, Sendable { case busy, setupUnfinished, error(Reason) }
+        /// What went wrong; the Island owns the wording.
+        public enum Reason: Equatable, Sendable { case microphoneDidNotStart, couldNotTranscribe, pasteFailed }
         public let kind: Kind
         public let raised: ContinuousClock.Instant
     }
@@ -94,7 +96,7 @@ public final class Dictation {
     public func shortcutPressed() async {
         switch state {
         case .idle:
-            guard (try? microphone.start()) != nil else { return raise(.error("Microphone didn't start")) }
+            guard (try? microphone.start()) != nil else { return raise(.error(.microphoneDidNotStart)) }
             recordingStartedAt = now()
             signal = nil
             state = .recording
@@ -147,11 +149,11 @@ public final class Dictation {
         state = .transcribing
         defer { if state == .transcribing { state = .idle } }
         guard let transcript = try? await transcriber.transcribe(recording) else {
-            return raise(.error("Couldn't transcribe"))
+            return raise(.error(.couldNotTranscribe))
         }
         guard !transcript.allSatisfy(\.isWhitespace) else { return }
         lastTranscript = transcript
-        do { try inserter.insert(transcript) } catch { raise(.error("Paste failed, Transcript copied")) }
+        do { try inserter.insert(transcript) } catch { raise(.error(.pasteFailed)) }
     }
 
     /// Esc was pressed: cancel a recording Dictation, throwing its Recording away.
