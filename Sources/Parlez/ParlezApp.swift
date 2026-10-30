@@ -9,6 +9,13 @@ struct ParlezApp: App {
         KeyboardShortcuts.onKeyDown(for: .dictation) {
             Task { await dictation.shortcutPressed() }
         }
+        KeyboardShortcuts.onKeyDown(for: .cancelDictation) {
+            Task { @MainActor in dictation.escPressed() }
+        }
+        KeyboardShortcuts.disable(.cancelDictation)
+        dictation.onRecordingChanged = { recording in
+            if recording { KeyboardShortcuts.enable(.cancelDictation) } else { KeyboardShortcuts.disable(.cancelDictation) }
+        }
     }
 
     var body: some Scene {

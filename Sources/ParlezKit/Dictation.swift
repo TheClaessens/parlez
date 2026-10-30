@@ -29,7 +29,15 @@ public struct Recording: Sendable {
 public final class Dictation {
     public enum State: Equatable, Sendable { case idle, recording, transcribing }
 
-    public private(set) var state: State = .idle
+    public private(set) var state: State = .idle {
+        didSet {
+            let recording = state == .recording
+            if recording != (oldValue == .recording) { onRecordingChanged?(recording) }
+        }
+    }
+    /// Called with true when a Dictation starts recording and false when it leaves recording, however it ends.
+    /// The app registers Esc as a global hotkey only in between.
+    @ObservationIgnored public var onRecordingChanged: (@MainActor (Bool) -> Void)?
     /// Kept for "Copy last Transcript".
     public private(set) var lastTranscript: String?
 
@@ -68,5 +76,12 @@ public final class Dictation {
         case .transcribing:
             break
         }
+    }
+
+    /// Esc was pressed: cancel a recording Dictation, throwing its Recording away.
+    public func escPressed() {
+        guard state == .recording else { return }
+        _ = microphone.stop()
+        state = .idle
     }
 }

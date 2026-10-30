@@ -51,6 +51,52 @@ struct DictationTests {
 
         #expect(dictation.lastTranscript == "Second.")
     }
+
+    @Test func escWhileRecordingCancelsWithNothingTranscribedOrInserted() async {
+        await dictation.shortcutPressed()
+
+        dictation.escPressed()
+
+        #expect(dictation.state == .idle)
+        #expect(microphone.stops == 1)
+        #expect(transcriber.transcriptions == 0)
+        #expect(inserter.inserted.isEmpty)
+        #expect(dictation.lastTranscript == nil)
+    }
+
+    @Test func escWhileIdleChangesNothing() {
+        dictation.escPressed()
+
+        #expect(dictation.state == .idle)
+        #expect(microphone.stops == 0)
+    }
+
+    @Test func escWhileTranscribingChangesNothing() async {
+        await dictation.shortcutPressed()
+        transcriber.holds = true
+        let stop = Task { await dictation.shortcutPressed() }
+        await transcriber.started()
+
+        dictation.escPressed()
+        #expect(dictation.state == .transcribing)
+
+        transcriber.finish("Still inserted.")
+        await stop.value
+        #expect(inserter.inserted == ["Still inserted."])
+        #expect(microphone.stops == 1)
+    }
+
+    @Test func reportsEnteringAndLeavingRecordingHoweverItEnds() async {
+        var reports: [Bool] = []
+        dictation.onRecordingChanged = { reports.append($0) }
+
+        await dictation.shortcutPressed()
+        dictation.escPressed()
+        await dictation.shortcutPressed()
+        await dictation.shortcutPressed()
+
+        #expect(reports == [true, false, true, false])
+    }
 }
 
 // MARK: - Fake adapters
@@ -58,7 +104,8 @@ struct DictationTests {
 @MainActor final class FakeMicrophone: Microphone {
     var recording = Recording(samples: [0.1, -0.1], sampleRate: 48_000)
     func start() throws {}
-    func stop() -> Recording { recording }
+    private(set) var stops = 0
+    func stop() -> Recording { stops += 1; return recording }
 }
 
 @MainActor final class FakeTranscriber: Transcriber {
@@ -69,7 +116,9 @@ struct DictationTests {
     private var pending: CheckedContinuation<String, Never>?
     private let (calls, called) = AsyncStream<Void>.makeStream()
 
+    private(set) var transcriptions = 0
     func transcribe(_ recording: Recording) async throws -> String {
+        transcriptions += 1
         guard holds else { return transcript }
         return await withCheckedContinuation { pending = $0; called.yield() }
     }
