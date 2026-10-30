@@ -345,7 +345,7 @@ struct DictationTests {
         await dictation.shortcutPressed()
 
         #expect(dictation.state == .idle)
-        #expect(dictation.signal?.kind == .error("Microphone didn't start"))
+        #expect(dictation.signal?.kind == .error(.microphoneDidNotStart))
     }
 
     @Test func emptyTranscriptInsertsNothing() async {
@@ -384,7 +384,7 @@ struct DictationTests {
 
         await dictate()
 
-        #expect(dictation.signal?.kind == .error("Couldn't transcribe"))
+        #expect(dictation.signal?.kind == .error(.couldNotTranscribe))
         #expect(inserter.inserted.isEmpty)
         #expect(dictation.lastTranscript == nil)
         #expect(dictation.state == .idle)
@@ -396,7 +396,7 @@ struct DictationTests {
 
         await dictate()
 
-        #expect(dictation.signal?.kind == .error("Paste failed, Transcript copied"))
+        #expect(dictation.signal?.kind == .error(.pasteFailed))
         #expect(dictation.lastTranscript == "Niet geplakt.")
         #expect(dictation.state == .idle)
     }
