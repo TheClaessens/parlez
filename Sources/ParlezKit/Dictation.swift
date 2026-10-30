@@ -98,6 +98,9 @@ public final class Dictation {
     public enum RetoucheSetting: Equatable, Sendable { case off, onDictationShortcut, onOwnShortcut }
     @ObservationIgnored public var retouche: RetoucheSetting = .off
 
+    /// Which shortcut was pressed. Both start a Dictation; the one that stops it decides whether it is retouched.
+    public enum Shortcut: Equatable, Sendable { case dictation, retouche }
+
     /// A Recording shorter than this is an accidental tap and is thrown away.
     public static let minimumRecording: Duration = .milliseconds(300)
 
@@ -131,8 +134,8 @@ public final class Dictation {
         self.now = now
     }
 
-    /// The Dictation shortcut was pressed: start a Dictation, or stop it and insert its Transcript.
-    public func shortcutPressed() async {
+    /// The Dictation or Retouche shortcut was pressed: start a Dictation, or stop it and insert its Transcript.
+    public func shortcutPressed(_ shortcut: Shortcut = .dictation) async {
         switch state {
         case .idle:
             guard (try? microphone.start()) != nil else { return raise(.error(.microphoneDidNotStart)) }
@@ -141,7 +144,7 @@ public final class Dictation {
             state = .recording
             if retouche != .off, retoucher.isAvailable { retoucher.warmUp() }
         case .recording:
-            await stop()
+            await stop(by: shortcut)
         case .unavailable:
             raise(.setupUnfinished)
         case .transcribing:
@@ -176,8 +179,8 @@ public final class Dictation {
     }
 
     /// Every stop, manual or automatic, goes through here: drop an accidental tap, otherwise
-    /// transcribe the Recording and insert a non-empty Transcript.
-    private func stop() async {
+    /// transcribe the Recording and insert a non-empty Transcript. An automatic stop counts as the Dictation shortcut.
+    private func stop(by shortcut: Shortcut = .dictation) async {
         let recording = microphone.stop()
         guard let recordingStartedAt, now() - recordingStartedAt >= Self.minimumRecording else {
             state = .idle
@@ -189,7 +192,7 @@ public final class Dictation {
             return raise(.error(.couldNotTranscribe))
         }
         // ponytail: Retouche runs inside transcribing until the Island gets its own retouching state.
-        if retouche == .onDictationShortcut, retoucher.isAvailable,
+        if shouldRetouche(stoppedBy: shortcut), retoucher.isAvailable,
             let retouched = try? await retoucher.retouch(transcript), Self.canTrust(retouched, from: transcript)
         {
             transcript = retouched
@@ -200,6 +203,12 @@ public final class Dictation {
             try inserter.insert(transcript)
             raise(.pasted(words: transcript.split(whereSeparator: \.isWhitespace).count))
         } catch { raise(.error(.pasteFailed)) }
+    }
+
+    /// The retouch rule: with Retouche on the Dictation shortcut every stop is retouched; on its own shortcut,
+    /// only a stop by the Retouche shortcut. (The Retoucher must also be available.)
+    private func shouldRetouche(stoppedBy shortcut: Shortcut) -> Bool {
+        retouche == .onDictationShortcut || (retouche == .onOwnShortcut && shortcut == .retouche)
     }
 
     /// The fallback rule (from the prototype): a Retouche only deletes, so a Retouched Transcript that adds

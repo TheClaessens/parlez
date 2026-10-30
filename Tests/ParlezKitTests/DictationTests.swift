@@ -512,6 +512,44 @@ struct DictationTests {
         #expect(inserter.inserted == [corrected])
     }
 
+    /// With Retouche on its own shortcut, the shortcut that stops decides, whichever one started.
+    @Test(arguments: [
+        (Dictation.Shortcut.dictation, Dictation.Shortcut.retouche, true),
+        (.retouche, .retouche, true),
+        (.retouche, .dictation, false),
+        (.dictation, .dictation, false),
+    ])
+    func onItsOwnShortcutTheStoppingShortcutDecides(start: Dictation.Shortcut, stop: Dictation.Shortcut, retouches: Bool) async {
+        dictation.retouche = .onOwnShortcut
+        transcriber.transcript = corrected
+        retoucher.retouched = "The button should be green."
+
+        await dictation.shortcutPressed(start)
+        clock.now += .seconds(1)
+        await dictation.shortcutPressed(stop)
+
+        #expect(inserter.inserted == [retouches ? "The button should be green." : corrected])
+        #expect(dictation.lastTranscript == (retouches ? "The button should be green." : corrected))
+    }
+
+    /// Setting off, or Retouche unavailable: the Retouche shortcut is a plain Dictation shortcut.
+    @Test(arguments: [(Dictation.RetoucheSetting.off, nil), (.onOwnShortcut, "Needs macOS 26.")])
+    func theRetoucheShortcutIsAPlainDictationShortcutWhenRetoucheCantRun(setting: Dictation.RetoucheSetting, unavailable: String?) async {
+        dictation.retouche = setting
+        retoucher.unavailableReason = unavailable
+        transcriber.transcript = corrected
+        retoucher.retouched = "The button should be green."
+
+        await dictation.shortcutPressed(.retouche)
+        #expect(dictation.state == .recording)
+        clock.now += .seconds(1)
+        await dictation.shortcutPressed(.retouche)
+
+        #expect(retoucher.calls.isEmpty)
+        #expect(inserter.inserted == [corrected])
+        #expect(dictation.signal?.kind == .pasted(words: 13))
+    }
+
     @Test func automaticStopIsNotRetouchedWhenRetoucheHasItsOwnShortcut() async {
         dictation.retouche = .onOwnShortcut
         transcriber.transcript = corrected

@@ -14,20 +14,23 @@ struct ParlezApp: App {
         let transcriber = VozTranscriber()
         let dictation = Dictation(
             microphone: microphone, transcriber: transcriber, inserter: PasteInserter(), retoucher: retoucher)
-        dictation.retouche = SettingsView.retoucheSetting(UserDefaults.standard.bool(forKey: SettingsView.retoucheKey))
         let setup = Setup(dictation: dictation, transcriber: transcriber)
         microphone.onLevel = { level in Task { await dictation.microphoneLevel(level) } }
-        KeyboardShortcuts.onKeyDown(for: .dictation) {
-            Task { @MainActor in
-                await dictation.shortcutPressed()
-                // The Island says "Finish Setup"; show where to finish it.
-                if dictation.state == .unavailable { setup.show() }
+        for (name, shortcut) in [(KeyboardShortcuts.Name.dictation, Dictation.Shortcut.dictation), (.retouche, .retouche)] {
+            KeyboardShortcuts.onKeyDown(for: name) {
+                Task { @MainActor in
+                    await dictation.shortcutPressed(shortcut)
+                    // The Island says "Finish Setup"; show where to finish it.
+                    if dictation.state == .unavailable { setup.show() }
+                }
             }
         }
         KeyboardShortcuts.onKeyDown(for: .cancelDictation) {
             Task { @MainActor in dictation.escPressed() }
         }
         KeyboardShortcuts.disable(.cancelDictation)
+        // After `onKeyDown`, which registers the Retouche shortcut whether or not it is wanted.
+        SettingsView.applyRetouche(to: dictation)
         dictation.onRecordingChanged = { recording in
             if recording { KeyboardShortcuts.enable(.cancelDictation) } else { KeyboardShortcuts.disable(.cancelDictation) }
             // Time passing, so the automatic stops still happen if the Microphone stops sending levels.
