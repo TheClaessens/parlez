@@ -1,16 +1,28 @@
 import AppKit
+import ApplicationServices
 import Carbon.HIToolbox
 
 /// The Inserter adapter: pastes the Transcript at the Caret with ⌘V, then puts the clipboard back.
 @MainActor public final class PasteInserter: Inserter {
     /// How long the target app gets to read the pasteboard before it is restored.
-    private let restoreDelay: Duration
+    /// ponytail: fixed; slow apps (Electron, remote desktop) may need longer, see the README checklist.
+    static let restoreDelay: Duration = .milliseconds(500)
 
-    public init(restoreDelay: Duration = .milliseconds(500)) {
-        self.restoreDelay = restoreDelay
+    public init() {}
+
+    /// Puts the Transcript on the clipboard, replacing what was there. Returns the pasteboard's change count after.
+    @discardableResult public static func copy(_ transcript: String) -> Int {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(transcript, forType: .string)
+        return NSPasteboard.general.changeCount
     }
 
-    public func insert(_ transcript: String) {
+    public func insert(_ transcript: String) throws {
+        // Without Accessibility the ⌘V would go nowhere: leave the Transcript on the clipboard instead.
+        guard AXIsProcessTrusted() else {
+            Self.copy(transcript)
+            throw NotTrusted()
+        }
         let pasteboard = NSPasteboard.general
         let saved = (pasteboard.pasteboardItems ?? []).map { item in
             let copy = NSPasteboardItem()
@@ -19,15 +31,13 @@ import Carbon.HIToolbox
             }
             return copy
         }
-        pasteboard.clearContents()
-        pasteboard.setString(transcript, forType: .string)
-        let ours = pasteboard.changeCount
+        let transcriptChangeCount = Self.copy(transcript)
         pressCommandV()
 
         Task {
-            try? await Task.sleep(for: restoreDelay)
+            try? await Task.sleep(for: Self.restoreDelay)
             // Leave the clipboard alone if something else was copied in the meantime.
-            guard pasteboard.changeCount == ours else { return }
+            guard pasteboard.changeCount == transcriptChangeCount else { return }
             pasteboard.clearContents()
             pasteboard.writeObjects(saved)
         }
@@ -41,4 +51,6 @@ import Carbon.HIToolbox
             event?.post(tap: .cghidEventTap)
         }
     }
+
+    private struct NotTrusted: Error {}
 }

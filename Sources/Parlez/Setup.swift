@@ -4,14 +4,26 @@ import ParlezKit
 import SwiftUI
 
 /// Setup: gets the Microphone and Accessibility permissions and prepares the speech model, then tells the
-/// Dictation core it is complete. Its window opens at launch only when a step is not satisfied.
-/// ponytail: checked at launch only; a permission revoked while Parlez runs is caught at the next launch.
+/// Dictation core it is complete. Its window opens at launch only when a step is not satisfied. It keeps
+/// watching the permissions afterwards: a revoke makes the core unavailable again and reopens the window.
 @MainActor @Observable
 final class Setup {
-    enum Step: Int { case microphone, accessibility, model }
+    enum Step: Int {
+        case microphone, accessibility, model
 
-    private(set) var microphone = AVCaptureDevice.authorizationStatus(for: .audio)
-    private(set) var accessibility = AXIsProcessTrusted()
+        /// The System Settings pane that grants this step; nil for the model.
+        var settingsPane: URL? {
+            let anchor: String? = switch self {
+            case .microphone: "Privacy_Microphone"
+            case .accessibility: "Privacy_Accessibility"
+            case .model: nil
+            }
+            return anchor.flatMap { URL(string: "x-apple.systempreferences:com.apple.preference.security?\($0)") }
+        }
+    }
+
+    private(set) var microphone: AVAuthorizationStatus = .notDetermined
+    private(set) var accessibility = false
     /// The model download fraction once the model step has started; nil before.
     private(set) var modelProgress: Double?
     private(set) var modelReady = false
@@ -34,23 +46,39 @@ final class Setup {
         self.transcriber = transcriber
     }
 
+    /// The one place the permissions are read; `current` turns them into each step's satisfaction.
+    private func checkPermissions() {
+        microphone = AVCaptureDevice.authorizationStatus(for: .audio)
+        accessibility = AXIsProcessTrusted()
+    }
+
     /// Called once at launch. With everything in place this only loads the model (~0.3 s), with no window.
     func start() {
-        if microphone != .authorized || !accessibility || !VozTranscriber.isModelDownloaded { show() }
+        checkPermissions()
+        if current != .model || !VozTranscriber.isModelDownloaded { show() }
         Task { await run() }
     }
 
-    /// Re-checks the permissions every second, so a grant in System Settings is seen without a restart,
-    /// and prepares the model once it is the current step.
+    /// Re-checks the permissions every second for as long as Parlez runs: a grant in System Settings is
+    /// seen without a restart, and a revoke puts the core back to unavailable and reopens Setup at that step.
+    /// Prepares the model once it is the current step.
     private func run() async {
-        while current != nil {
-            microphone = AVCaptureDevice.authorizationStatus(for: .audio)
-            accessibility = AXIsProcessTrusted()
+        var complete = false
+        while true {
+            checkPermissions()
+            if complete != (current == nil) {
+                complete.toggle()
+                if complete {
+                    dictation.setupCompleted()
+                    window?.close()
+                } else {
+                    dictation.setupIncomplete()
+                    show()
+                }
+            }
             if current == .model, modelProgress == nil, !modelFailed { await prepareModel() }
             try? await Task.sleep(for: .seconds(1))
         }
-        dictation.setupCompleted()
-        window?.close()
     }
 
     private func prepareModel() async {
@@ -69,14 +97,14 @@ final class Setup {
     func requestMicrophone() {
         Task {
             _ = await AVCaptureDevice.requestAccess(for: .audio)
-            microphone = AVCaptureDevice.authorizationStatus(for: .audio)
+            checkPermissions()
         }
     }
 
     func retryModel() { modelFailed = false }
 
-    func openSystemSettings(_ pane: String) {
-        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")!)
+    func openSystemSettings(for step: Step) {
+        if let pane = step.settingsPane { NSWorkspace.shared.open(pane) }
     }
 
     private func show() {
@@ -88,9 +116,7 @@ final class Setup {
             window.center()
             self.window = window
         }
-        // Parlez has no Dock icon, so activate it to bring the window to the front.
-        NSApp.activate()
-        window?.makeKeyAndOrderFront(nil)
+        bringToFront { window?.makeKeyAndOrderFront(nil) }
     }
 }
 
@@ -105,13 +131,13 @@ struct SetupView: View {
                 if setup.microphone == .notDetermined {
                     Button("Allow Microphone") { setup.requestMicrophone() }
                 } else {
-                    Button("Open System Settings") { setup.openSystemSettings("Privacy_Microphone") }
+                    Button("Open System Settings") { setup.openSystemSettings(for: .microphone) }
                 }
             }
             step(.accessibility, "Accessibility",
                  "Parlez pastes your Transcript by pressing ⌘V for you, which macOS only allows with Accessibility "
                  + "permission. Turn Parlez on in the list; this window moves on by itself.") {
-                Button("Open System Settings") { setup.openSystemSettings("Privacy_Accessibility") }
+                Button("Open System Settings") { setup.openSystemSettings(for: .accessibility) }
             }
             step(.model, "Speech model",
                  "Downloads the speech model and prepares it once, so your first Dictation is instant.") {

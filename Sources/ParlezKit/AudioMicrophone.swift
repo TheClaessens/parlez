@@ -46,8 +46,8 @@ import Synchronization
 }
 
 private final class Samples: Sendable {
-    private let buffer = Mutex<[Float]>([])
-    func reset() { buffer.withLock { $0 = [] } }
-    func append(_ mono: UnsafeBufferPointer<Float>) { buffer.withLock { $0.append(contentsOf: mono) } }
-    func take() -> [Float] { buffer.withLock { $0 } }
+    private let recording = Mutex<[Float]>([])
+    func reset() { recording.withLock { $0 = [] } }
+    func append(_ mono: UnsafeBufferPointer<Float>) { recording.withLock { $0.append(contentsOf: mono) } }
+    func take() -> [Float] { recording.withLock { $0 } }
 }

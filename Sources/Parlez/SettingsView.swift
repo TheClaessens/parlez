@@ -35,15 +35,12 @@ struct SettingsView: View {
     }
 }
 
-/// The "Settings…" menu item. Parlez has no Dock icon, so it activates the app to bring the window to the front.
+/// The "Settings…" menu item.
 struct SettingsMenuItem: View {
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        Button("Settings…") {
-            NSApp.activate()
-            openSettings()
-        }
+        Button("Settings…") { bringToFront { openSettings() } }
         .keyboardShortcut(",")
     }
 }

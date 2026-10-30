@@ -9,7 +9,7 @@ public struct IslandLayout: Equatable, Sendable {
     public let notch: CGSize?
 
     /// How far the Island reaches past each side of the notch, and the height of its row below it.
-    static let wing: CGFloat = 20
+    static let overhang: CGFloat = 20
     static let rowHeight: CGFloat = 36
     /// The Island's width on a screen without a notch, and its gap below the menu bar.
     static let floatingWidth: CGFloat = 220
@@ -19,7 +19,7 @@ public struct IslandLayout: Equatable, Sendable {
         if safeAreaTop > 0, let left = topLeftArea, let right = topRightArea {
             // The notch is centred: it is whatever the menu bar areas either side of it leave over.
             let notch = CGSize(width: screenFrame.width - left.width - right.width, height: safeAreaTop)
-            let size = CGSize(width: notch.width + 2 * Self.wing, height: notch.height + Self.rowHeight)
+            let size = CGSize(width: notch.width + 2 * Self.overhang, height: notch.height + Self.rowHeight)
             self.notch = notch
             frame = CGRect(x: screenFrame.midX - size.width / 2, y: screenFrame.maxY - size.height, width: size.width, height: size.height)
         } else {
@@ -35,6 +35,11 @@ public struct IslandLayout: Equatable, Sendable {
             screenFrame: screen.frame, visibleFrame: screen.visibleFrame, safeAreaTop: screen.safeAreaInsets.top,
             topLeftArea: screen.auxiliaryTopLeftArea, topRightArea: screen.auxiliaryTopRightArea)
     }
+}
+
+/// Whether the Island is out: during a Dictation, or while a signal is showing.
+private func islandIsOut(_ state: Dictation.State, showingSignal: Bool) -> Bool {
+    state == .recording || state == .transcribing || showingSignal
 }
 
 /// The Island: a borderless, non-activating panel at the top of the screen with the active menu bar.
@@ -58,8 +63,9 @@ public struct IslandLayout: Equatable, Sendable {
     }
 
     private func changed() {
-        // Move to the active menu bar's screen when a Dictation starts, or when a signal shows outside one.
-        if dictation.state == .recording || (dictation.state != .transcribing && dictation.signal != nil) { place() }
+        // Move to the active menu bar's screen when the Island comes out, but not mid-Dictation
+        // (transcribing follows recording, which already placed it).
+        if dictation.state != .transcribing, islandIsOut(dictation.state, showingSignal: dictation.signal != nil) { place() }
         observe()
     }
 
@@ -107,16 +113,16 @@ struct IslandView: View {
     static let meterGain: Float = 2.5
 
     private var expanded: Bool {
-        appeared && (dictation.state == .recording || dictation.state == .transcribing || showingSignal)
+        appeared && islandIsOut(dictation.state, showingSignal: showingSignal)
     }
 
     var body: some View {
         let collapsed = notch ?? .zero
-        let radius: CGFloat = notch == nil ? IslandLayout.rowHeight / 2 : 14
+        // Under the notch only the bottom corners are rounded; floating, it is a full pill.
+        let (top, bottom): (CGFloat, CGFloat) = notch == nil ? (IslandLayout.rowHeight / 2, IslandLayout.rowHeight / 2) : (0, 14)
         ZStack(alignment: .bottom) {
             UnevenRoundedRectangle(
-                topLeadingRadius: notch == nil ? radius : 0, bottomLeadingRadius: radius,
-                bottomTrailingRadius: radius, topTrailingRadius: notch == nil ? radius : 0)
+                topLeadingRadius: top, bottomLeadingRadius: bottom, bottomTrailingRadius: bottom, topTrailingRadius: top)
                 .fill(.black)
             if expanded {
                 content.frame(height: IslandLayout.rowHeight)

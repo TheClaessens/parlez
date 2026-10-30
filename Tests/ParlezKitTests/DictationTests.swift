@@ -57,6 +57,42 @@ struct DictationTests {
         #expect(dictation.state == .recording)
     }
 
+    @Test func setupIncompleteMakesTheShortcutUnavailableAgain() async {
+        dictation.setupIncomplete()
+
+        await dictation.shortcutPressed()
+
+        #expect(dictation.state == .unavailable)
+        #expect(dictation.signal?.kind == .busy)
+        #expect(transcriber.calls == 0)
+    }
+
+    @Test func setupIncompleteWhileRecordingThrowsTheRecordingAway() async {
+        await dictation.shortcutPressed()
+        clock.now += .seconds(1)
+
+        dictation.setupIncomplete()
+
+        #expect(dictation.state == .unavailable)
+        #expect(microphone.stops == 1)
+        #expect(transcriber.calls == 0)
+    }
+
+    @Test func setupIncompleteWhileTranscribingStillInsertsThenStaysUnavailable() async {
+        await dictation.shortcutPressed()
+        clock.now += .seconds(1)
+        transcriber.holds = true
+        let stop = Task { await dictation.shortcutPressed() }
+        await transcriber.started()
+
+        dictation.setupIncomplete()
+        transcriber.finish("Nog net.")
+        await stop.value
+
+        #expect(inserter.inserted == ["Nog net."])
+        #expect(dictation.state == .unavailable)
+    }
+
     @Test func transcriptIsInsertedAtTheCaret() async {
         transcriber.transcript = "Ik denk hardop."
 
@@ -153,6 +189,32 @@ struct DictationTests {
         #expect(inserter.inserted == ["Lawaaierig café."])
     }
 
+    @Test func stalledMicrophoneStillStopsAtTenMinutes() async {
+        transcriber.transcript = "Stil gevallen."
+        await dictation.shortcutPressed()
+
+        clock.now += .seconds(599)
+        await dictation.tick()
+        #expect(dictation.state == .recording)
+
+        clock.now += .seconds(1)
+        await dictation.tick()
+
+        #expect(dictation.state == .idle)
+        #expect(inserter.inserted == ["Stil gevallen."])
+    }
+
+    @Test func silenceStopsOnTicksAfterTheReadingsStop() async {
+        await dictation.shortcutPressed()
+        await dictation.microphoneLevel(quiet)
+
+        clock.now += Dictation.silenceLimit
+        await dictation.tick()
+
+        #expect(dictation.state == .idle)
+        #expect(inserter.inserted.count == 1)
+    }
+
     // MARK: Esc
     @Test func escWhileRecordingCancelsWithNothingTranscribedOrInserted() async {
         await dictation.shortcutPressed()
@@ -245,6 +307,15 @@ struct DictationTests {
         #expect(dictation.state == .idle)
     }
 
+    @Test func microphoneThatFailsToStartSignalsAnError() async {
+        microphone.fails = true
+
+        await dictation.shortcutPressed()
+
+        #expect(dictation.state == .idle)
+        #expect(dictation.signal?.kind == .error("Microphone didn't start"))
+    }
+
     @Test func emptyTranscriptInsertsNothing() async {
         transcriber.transcript = "Kept."
         await dictate()
@@ -275,14 +346,25 @@ struct DictationTests {
         #expect(inserter.inserted == ["Done."])
     }
 
-    @Test func transcriptionFailureSignalsAnErrorAndInsertsNothing() async {
+    @Test func failingToTranscribeSignalsAnErrorAndInsertsNothing() async {
         transcriber.fails = true
 
         await dictate()
 
-        #expect(dictation.signal?.kind == .error("Transcription failed"))
+        #expect(dictation.signal?.kind == .error("Couldn't transcribe"))
         #expect(inserter.inserted.isEmpty)
         #expect(dictation.lastTranscript == nil)
+        #expect(dictation.state == .idle)
+    }
+
+    @Test func failedPasteSignalsAnErrorAndKeepsTheTranscript() async {
+        transcriber.transcript = "Niet geplakt."
+        inserter.fails = true
+
+        await dictate()
+
+        #expect(dictation.signal?.kind == .error("Paste failed, Transcript copied"))
+        #expect(dictation.lastTranscript == "Niet geplakt.")
         #expect(dictation.state == .idle)
     }
 
@@ -301,7 +383,9 @@ struct DictationTests {
 
 @MainActor final class FakeMicrophone: Microphone {
     var recording = Recording(samples: [0.1, -0.1], sampleRate: 48_000)
-    func start() throws {}
+    /// When true, `start` throws.
+    var fails = false
+    func start() throws { if fails { throw MicrophoneFailed() } }
     private(set) var stops = 0
     func stop() -> Recording { stops += 1; return recording }
 }
@@ -319,22 +403,29 @@ struct DictationTests {
 
     func transcribe(_ recording: Recording) async throws -> String {
         calls += 1
-        if fails { throw TranscriptionFailed() }
+        if fails { throw TranscriberFailed() }
         guard holds else { return transcript }
         return await withCheckedContinuation { pending = $0; called.yield() }
     }
 
-    /// Waits until a held transcription has started.
+    /// Waits until a held `transcribe` call has started.
     func started() async { for await _ in started { return } }
 
     func finish(_ text: String) { pending?.resume(returning: text); pending = nil }
 }
 
-struct TranscriptionFailed: Error {}
+struct TranscriberFailed: Error {}
+struct MicrophoneFailed: Error {}
+struct InserterFailed: Error {}
 
 @MainActor final class FakeInserter: Inserter {
     private(set) var inserted: [String] = []
-    func insert(_ transcript: String) { inserted.append(transcript) }
+    /// When true, `insert` throws, as the real one does without Accessibility permission.
+    var fails = false
+    func insert(_ transcript: String) throws {
+        if fails { throw InserterFailed() }
+        inserted.append(transcript)
+    }
 }
 
 @MainActor final class FakeClock {

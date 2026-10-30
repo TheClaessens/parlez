@@ -38,6 +38,7 @@ To publish a release, bump `version` in `scripts/build.sh`, run `scripts/build.s
 The Dictation core is covered by `swift test`. Everything below wraps macOS and is checked by hand before a release.
 
 - [ ] **Dictation and paste**: in TextEdit, a browser, Slack, VS Code and a terminal, ⌃⌥Space → speak → ⌃⌥Space pastes the Transcript at the Caret, and the clipboard still holds what was there before.
+- [ ] **Clipboard restore delay** (`PasteInserter.restoreDelay`, 0.5 s): in slow apps (an Electron app such as Slack or VS Code, and a remote desktop session), the Transcript is pasted, not the old clipboard contents.
 - [ ] **Esc**: Esc during a Dictation cancels it and nothing is pasted. Afterwards, Esc works normally in other apps.
 - [ ] **Silence threshold** (`Dictation.silenceThreshold`): normal speaking, including thinking pauses, never counts as silence, and 30 s in a quiet room stops the Dictation.
 - [ ] **Level meter** (`IslandView.meterGain`): the Island's meter moves clearly with normal speech, doesn't sit pinned at full, and stays low in a quiet room.

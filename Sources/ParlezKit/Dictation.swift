@@ -20,14 +20,15 @@ public struct Recording: Sendable {
 }
 
 @MainActor public protocol Inserter: AnyObject {
-    func insert(_ transcript: String)
+    /// Pastes the Transcript at the Caret. Throws when it cannot paste, leaving the Transcript on the clipboard.
+    func insert(_ transcript: String) throws
 }
 
 /// The Dictation core: every rule about when a Dictation starts, stops and what gets inserted.
 /// It makes no OS calls of its own; it only talks to the adapters it is given.
 @MainActor @Observable
 public final class Dictation {
-    /// `unavailable` until Setup is complete.
+    /// `unavailable` while Setup is not complete.
     public enum State: Equatable, Sendable { case unavailable, idle, recording, transcribing }
 
     /// A short-lived signal for the Island. Each one raised is a new value (its `raised` instant differs),
@@ -50,7 +51,7 @@ public final class Dictation {
     /// The latest Microphone level while recording (for the Island's meter); 0 otherwise.
     public private(set) var level: Float = 0
     /// Called with true when a Dictation starts recording and false when it leaves recording, however it ends.
-    /// The app registers Esc as a global hotkey only in between.
+    /// The app registers Esc as the cancel shortcut only in between.
     @ObservationIgnored public var onRecordingChanged: (@MainActor (Bool) -> Void)?
     /// The last signal raised; cleared when the next Dictation starts.
     public private(set) var signal: Signal?
@@ -63,7 +64,8 @@ public final class Dictation {
     private let microphone: any Microphone
     private let transcriber: any Transcriber
     private let inserter: any Inserter
-    /// The Clock adapter, for the silence and length limits and the 0.3 s minimum.
+    /// Reads the current instant (injected so tests control time), for the silence and length limits
+    /// and the 0.3 s minimum.
     private let now: @MainActor () -> ContinuousClock.Instant
     private var startedAt: ContinuousClock.Instant?
     /// When the current run of readings below `silenceThreshold` began; nil while there is sound.
@@ -91,7 +93,7 @@ public final class Dictation {
     public func shortcutPressed() async {
         switch state {
         case .idle:
-            guard (try? microphone.start()) != nil else { return }
+            guard (try? microphone.start()) != nil else { return raise(.error("Microphone didn't start")) }
             startedAt = now()
             signal = nil
             state = .recording
@@ -107,13 +109,26 @@ public final class Dictation {
         if state == .unavailable { state = .idle }
     }
 
-    /// A level reading from the Microphone while recording. Readings are also the core's sense of
-    /// time passing: the automatic stops are judged on each one.
+    /// Setup is incomplete again (a permission was revoked): the Dictation shortcut becomes unavailable.
+    /// A recording Dictation is thrown away; one already transcribing still inserts its Transcript.
+    public func setupIncomplete() {
+        if state == .recording { _ = microphone.stop() }
+        state = .unavailable
+    }
+
+    /// A level reading from the Microphone while recording. Each reading also counts as time passing.
     public func microphoneLevel(_ level: Float) async {
-        guard state == .recording, let startedAt else { return }
+        guard state == .recording else { return }
         self.level = level
+        silentSince = level < Self.silenceThreshold ? silentSince ?? now() : nil
+        await tick()
+    }
+
+    /// Time passing: the app calls this on a timer while recording, so the automatic stops still
+    /// happen when the Microphone stalls and sends no readings.
+    public func tick() async {
+        guard state == .recording, let startedAt else { return }
         let now = now()
-        silentSince = level < Self.silenceThreshold ? silentSince ?? now : nil
         let silentTooLong = silentSince.map { now - $0 >= Self.silenceLimit } ?? false
         if silentTooLong || now - startedAt >= Self.lengthLimit { await stop() }
     }
@@ -127,16 +142,13 @@ public final class Dictation {
             return
         }
         state = .transcribing
-        do {
-            let transcript = try await transcriber.transcribe(recording)
-            if !transcript.allSatisfy(\.isWhitespace) {
-                lastTranscript = transcript
-                inserter.insert(transcript)
-            }
-        } catch {
-            raise(.error("Transcription failed"))
+        defer { if state == .transcribing { state = .idle } }
+        guard let transcript = try? await transcriber.transcribe(recording) else {
+            return raise(.error("Couldn't transcribe"))
         }
-        state = .idle
+        guard !transcript.allSatisfy(\.isWhitespace) else { return }
+        lastTranscript = transcript
+        do { try inserter.insert(transcript) } catch { raise(.error("Paste failed, Transcript copied")) }
     }
 
     /// Esc was pressed: cancel a recording Dictation, throwing its Recording away.
