@@ -81,18 +81,42 @@ struct ParlezApp: App {
     }
 }
 
-/// The menu bar icon, red while recording.
+/// The menu bar icon: the Parlez mark, red while recording and dimmed until Setup is finished.
 struct MenuBarIcon: View {
     let dictation: Dictation
 
     var body: some View {
-        // The menu bar draws images as monochrome templates, so the red one is an NSImage that opts out.
-        let image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Parlez")!
-        if dictation.state == .recording, let red = image.withSymbolConfiguration(.init(paletteColors: [.systemRed])) {
-            red.isTemplate = false
-            return Image(nsImage: red)
+        // The menu bar draws images as monochrome templates, so the red one opts out.
+        switch dictation.state {
+        case .recording: Image(nsImage: Self.mark(.systemRed, template: false))
+        case .unavailable: Image(nsImage: Self.mark(.black.withAlphaComponent(0.35)))
+        default: Image(nsImage: Self.mark(.black))
         }
-        return Image(nsImage: image)
+    }
+
+    /// The rounded rectangles of `brand/parlez-mark.svg` (x, y, width, height on its 24-unit grid): three bars, then the caret.
+    static let shapes: [(Double, Double, Double, Double)] = [
+        (2.75, 8.75, 2.5, 6.5), (6.75, 5.75, 2.5, 12.5), (10.75, 7.75, 2.5, 8.5),
+        (14.75, 2.75, 6.5, 2.5), (16.75, 2.75, 2.5, 18.5), (14.75, 18.75, 6.5, 2.5),
+    ]
+
+    /// The mark at 18 pt, showing the grid's square from (1.5, 1.5) to (22.5, 22.5) like the SVG.
+    static func mark(_ color: NSColor, template: Bool = true) -> NSImage {
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { _ in
+            let scale = 18 / 21.0, radius = 1.25 * scale
+            // One path, filled once, so the caret's overlapping parts don't darken when dimmed.
+            let path = NSBezierPath()
+            for (x, y, width, height) in shapes {
+                let rect = NSRect(x: (x - 1.5) * scale, y: (y - 1.5) * scale, width: width * scale, height: height * scale)
+                path.append(NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius))
+            }
+            color.setFill()
+            path.fill()
+            return true
+        }
+        image.isTemplate = template
+        image.accessibilityDescription = "Parlez"
+        return image
     }
 }
 
