@@ -4,10 +4,14 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Core tests: before Setup is complete, a shortcut press starts nothing and raises the busy signal; after completion, it starts a Dictation.
 - [ ] The Setup window shows the three steps with their status, and moves on as each one is granted or finished.
 - [ ] The model step shows download progress, then loads the model once so the first Dictation is fast.
 - [ ] At launch, if any step is not satisfied, Setup opens at the first unsatisfied step; otherwise it does not appear.
 - [ ] By hand: verified from a clean state (permissions reset, model cache removed).
+
+## Comments
+
+- 2026-10-30: Merged on `parlez/integration` (review fixes at 9b2f024). Automated checks pass (29 tests). "By hand" criteria await verification per the README hand-check checklist.

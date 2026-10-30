@@ -4,8 +4,12 @@
 
 **Blocked by:** 05, 06, 07
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Release mode produces a versioned zip of `Parlez.app` that unpacks to a working app.
 - [x] The README covers install from a release (with "Open Anyway"), build from source, manual updates, the hand-check checklist, the Desert Ant Labs credit and the Voz license link.
 - [x] An MIT `LICENSE` file is present.
+
+## Comments
+
+- 2026-10-30: Merged on `parlez/integration` (review fixes at 9b2f024). Automated checks pass (29 tests). "By hand" criteria await verification per the README hand-check checklist.

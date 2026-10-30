@@ -1,6 +1,6 @@
 # Parlez: on-device dictation into any app
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
@@ -124,3 +124,7 @@ Parlez is a menu-bar app for macOS. Pressing the **Dictation shortcut** starts a
 - The spike lives on branch `prototype/voz-spike` and is not merged; its `VERDICT.md` holds the measurements (~7 s Recordings transcribe in 115–145 ms on an M3 Pro; cached model load 0.29 s; Voz drops fillers; mixed-language and vocabulary results). ADR-0001 records why Voz was chosen and what the spike confirmed.
 - Use the glossary terms throughout: Dictation, Dictation shortcut, Recording, Transcript, Caret, Island, Setup.
 - The Voz SDK contacts `events.desertant.com` whenever the model loads. That is expected, not a bug.
+
+## Comments
+
+- 2026-10-30: Merged on `parlez/integration` (review fixes at 9b2f024). Automated checks pass (29 tests). "By hand" criteria await verification per the README hand-check checklist.

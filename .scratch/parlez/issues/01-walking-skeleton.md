@@ -6,7 +6,7 @@ Not in this ticket: Setup (rely on the system's own permission prompts), the Isl
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] One Swift package (tools 6.2+, macOS 15+) with a library target for everything except the app entry point, an executable app target, and a test target using Swift's `Testing` framework; `swift build` and `swift test` pass.
 - [x] The Dictation core takes events and exposes an observable state (at least idle, recording, transcribing); it makes no direct OS calls and talks only to the four adapters.
@@ -14,3 +14,7 @@ Not in this ticket: Setup (rely on the system's own permission prompts), the Isl
 - [x] The Inserter saves the clipboard, pastes with ⌘V, then restores the clipboard after a short delay.
 - [ ] The build/install script assembles `Parlez.app` (agent app with no Dock icon, microphone usage description, bundle identifier `com.thomasclaessens.parlez`), signs it with the Apple Development identity when present and ad-hoc otherwise (overridable by an environment variable), and copies it into Applications.
 - [ ] By hand: in TextEdit, ⌃⌥Space → speak → ⌃⌥Space pastes the Transcript at the Caret, and the clipboard still holds what was there before.
+
+## Comments
+
+- 2026-10-30: Merged on `parlez/integration` (review fixes at 9b2f024). Automated checks pass (29 tests). "By hand" criteria await verification per the README hand-check checklist.

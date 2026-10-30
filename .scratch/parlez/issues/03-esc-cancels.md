@@ -4,9 +4,13 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] Core tests: Esc while recording returns to idle with nothing transcribed or inserted.
 - [x] Core tests: Esc while idle or transcribing changes nothing.
 - [x] Esc is registered as a global hotkey only while recording and is unregistered as soon as the Dictation leaves recording, however it ends.
 - [ ] By hand: Esc during a Dictation cancels it; Esc afterwards works normally in other apps.
+
+## Comments
+
+- 2026-10-30: Merged on `parlez/integration` (review fixes at 9b2f024). Automated checks pass (29 tests). "By hand" criteria await verification per the README hand-check checklist.
