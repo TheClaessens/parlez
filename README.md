@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brand/parlez-mark-dark.svg">
+  <img src="brand/parlez-mark.svg" alt="Parlez" height="64">
+</picture>
+
 # Parlez
 
 Dictation for macOS that runs on your Mac and lives in the menu bar. Press the Dictation shortcut (⌃⌥Space by default) and talk, in English or Dutch. Press it again and the Transcript is pasted at the Caret of whatever app you are typing in. Your clipboard is put back afterwards. While you talk, the Island grows out of the notch and shows a level meter. Esc cancels. A Dictation stops by itself after 30 s of silence or 10 minutes.

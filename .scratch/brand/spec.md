@@ -1,6 +1,6 @@
 # Brand: the Parlez mark on the app icon, the menu bar and the README
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 

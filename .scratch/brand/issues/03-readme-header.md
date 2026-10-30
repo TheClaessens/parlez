@@ -4,7 +4,11 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Above `# Parlez`, a `<picture>` uses `brand/parlez-mark-dark.svg` for `prefers-color-scheme: dark` and `brand/parlez-mark.svg` otherwise, about 64 px tall, alt text "Parlez".
-- [ ] The title stays a text heading.
+- [x] Above `# Parlez`, a `<picture>` uses `brand/parlez-mark-dark.svg` for `prefers-color-scheme: dark` and `brand/parlez-mark.svg` otherwise, about 64 px tall, alt text "Parlez".
+- [x] The title stays a text heading.
+
+## Comments
+
+Both SVG paths resolve from the repo root. How GitHub draws it in its light and dark themes is checked after a push.
