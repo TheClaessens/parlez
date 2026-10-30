@@ -6,9 +6,14 @@ Found during the first hand check (2026-10-30): after granting the Microphone pe
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] When a Setup step becomes satisfied and another step is still open, the Setup window is brought to the front.
-- [ ] Pressing the Dictation shortcut while Setup is unfinished brings the Setup window to the front.
-- [ ] In that case the Island shows a short "Finish Setup" message instead of only shaking (core test: a shortcut press while unavailable raises a signal that says Setup is unfinished; a press while transcribing still raises the plain busy shake).
+- [x] When a Setup step becomes satisfied and another step is still open, the Setup window is brought to the front.
+- [x] Pressing the Dictation shortcut while Setup is unfinished brings the Setup window to the front.
+- [x] In that case the Island shows a short "Finish Setup" message instead of only shaking (core test: a shortcut press while unavailable raises a signal that says Setup is unfinished; a press while transcribing still raises the plain busy shake).
 - [ ] By hand: from a clean state, grant each permission and confirm the Setup window comes back to the front each time.
+
+
+## Comments
+
+- 2026-10-30: Implemented on `parlez/integration`. Automated checks pass (29 tests). The "By hand" criterion awaits verification per the README hand-check checklist (Setup from a clean state).

@@ -64,8 +64,12 @@ final class Setup {
     /// Prepares the model once it is the current step.
     private func run() async {
         var complete = false
+        var last = current
         while true {
             checkPermissions()
+            // A grant's system prompt or System Settings took the focus: bring Setup back for the next step.
+            if current != last, current != nil { show() }
+            last = current
             if complete != (current == nil) {
                 complete.toggle()
                 if complete {
@@ -107,7 +111,7 @@ final class Setup {
         if let pane = step.settingsPane { NSWorkspace.shared.open(pane) }
     }
 
-    private func show() {
+    func show() {
         if window == nil {
             let window = NSWindow(contentViewController: NSHostingController(rootView: SetupView(setup: self)))
             window.title = "Parlez Setup"
@@ -117,6 +121,8 @@ final class Setup {
             self.window = window
         }
         bringToFront { window?.makeKeyAndOrderFront(nil) }
+        // macOS may refuse the activation while another app has focus; this still puts the window on top.
+        window?.orderFrontRegardless()
     }
 }
 

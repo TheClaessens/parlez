@@ -12,9 +12,14 @@ struct ParlezApp: App {
         let microphone = AudioMicrophone()
         let transcriber = VozTranscriber()
         let dictation = Dictation(microphone: microphone, transcriber: transcriber, inserter: PasteInserter())
+        let setup = Setup(dictation: dictation, transcriber: transcriber)
         microphone.onLevel = { level in Task { await dictation.microphoneLevel(level) } }
         KeyboardShortcuts.onKeyDown(for: .dictation) {
-            Task { await dictation.shortcutPressed() }
+            Task { @MainActor in
+                await dictation.shortcutPressed()
+                // The Island says "Finish Setup"; show where to finish it.
+                if dictation.state == .unavailable { setup.show() }
+            }
         }
         KeyboardShortcuts.onKeyDown(for: .cancelDictation) {
             Task { @MainActor in dictation.escPressed() }
@@ -33,7 +38,7 @@ struct ParlezApp: App {
         }
         self.dictation = dictation
         island = Island(dictation: dictation)
-        setup = Setup(dictation: dictation, transcriber: transcriber)
+        self.setup = setup
         setup.start()
     }
 

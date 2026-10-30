@@ -34,7 +34,7 @@ public final class Dictation {
     /// A short-lived signal for the Island. Each one raised is a new value (its `raised` instant differs),
     /// so the Island can react to every raise and decide how long to show it.
     public struct Signal: Equatable, Sendable {
-        public enum Kind: Equatable, Sendable { case busy, error(String) }
+        public enum Kind: Equatable, Sendable { case busy, setupUnfinished, error(String) }
         public let kind: Kind
         public let raised: ContinuousClock.Instant
     }
@@ -99,7 +99,9 @@ public final class Dictation {
             state = .recording
         case .recording:
             await stop()
-        case .unavailable, .transcribing:
+        case .unavailable:
+            raise(.setupUnfinished)
+        case .transcribing:
             raise(.busy)
         }
     }

@@ -139,10 +139,10 @@ struct IslandView: View {
             showingSignal = dictation.signal != nil
             message = nil
             guard let signal = dictation.signal else { return }
-            if case .error(let text) = signal.kind {
-                message = text
-            } else {
-                withAnimation(.linear(duration: 0.4)) { shakes += 1 }
+            switch signal.kind {
+            case .error(let text): message = text
+            case .setupUnfinished: message = "Finish Setup"
+            case .busy: withAnimation(.linear(duration: 0.4)) { shakes += 1 }
             }
             try? await Task.sleep(for: message == nil ? Self.shakeDuration : Self.messageDuration)
             if !Task.isCancelled {

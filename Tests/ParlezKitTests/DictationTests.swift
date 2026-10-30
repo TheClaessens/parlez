@@ -41,7 +41,7 @@ struct DictationTests {
 
     // MARK: Setup
 
-    @Test func beforeSetupIsCompleteThePressStartsNothingAndSignalsBusy() async {
+    @Test func beforeSetupIsCompleteThePressStartsNothingAndSignalsSetupUnfinished() async {
         let dictation = Dictation(
             microphone: microphone, transcriber: transcriber, inserter: inserter, now: { [clock] in clock.now })
         #expect(dictation.state == .unavailable)
@@ -49,7 +49,7 @@ struct DictationTests {
         await dictation.shortcutPressed()
 
         #expect(dictation.state == .unavailable)
-        #expect(dictation.signal?.kind == .busy)
+        #expect(dictation.signal?.kind == .setupUnfinished)
 
         dictation.setupCompleted()
         #expect(dictation.state == .idle)
@@ -63,7 +63,7 @@ struct DictationTests {
         await dictation.shortcutPressed()
 
         #expect(dictation.state == .unavailable)
-        #expect(dictation.signal?.kind == .busy)
+        #expect(dictation.signal?.kind == .setupUnfinished)
         #expect(transcriber.calls == 0)
     }
 
