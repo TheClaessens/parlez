@@ -5,6 +5,7 @@ import SwiftUI
 @main
 struct ParlezApp: App {
     let dictation: Dictation
+    let island: Island
 
     init() {
         let microphone = AudioMicrophone()
@@ -21,6 +22,7 @@ struct ParlezApp: App {
             if recording { KeyboardShortcuts.enable(.cancelDictation) } else { KeyboardShortcuts.disable(.cancelDictation) }
         }
         self.dictation = dictation
+        island = Island(dictation: dictation)
     }
 
     var body: some Scene {

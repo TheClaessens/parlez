@@ -6,7 +6,7 @@
 
 **Status:** ready-for-agent
 
-- [ ] The Island is a borderless, non-activating panel above other windows that never steals focus or keyboard input from the app being dictated into.
-- [ ] It is sized and positioned from the screen's notch geometry when present, and at the top centre otherwise.
-- [ ] It renders recording (with the live level), transcribing, busy shake, error message and collapse, driven only by the core's state and signals.
+- [x] The Island is a borderless, non-activating panel above other windows that never steals focus or keyboard input from the app being dictated into.
+- [x] It is sized and positioned from the screen's notch geometry when present, and at the top centre otherwise.
+- [x] It renders recording (with the live level), transcribing, busy shake, error message and collapse, driven only by the core's state and signals.
 - [ ] By hand: verified on the built-in display (notch) and on an external display as main (no notch).
