@@ -7,7 +7,6 @@ struct ParlezApp: App {
     let dictation: Dictation
     let island: Island
     let setup: Setup
-    let transcriber: VozTranscriber
     let retoucher = makeRetoucher()
 
     init() {
@@ -32,7 +31,6 @@ struct ParlezApp: App {
         KeyboardShortcuts.disable(.cancelDictation)
         // After `onKeyDown`, which registers the Retouche shortcut whether or not it is wanted.
         Self.applyRetouche(to: dictation)
-        Self.applyRemoveFillers(to: transcriber, download: false)
         dictation.onRecordingChanged = { recording in
             if recording { KeyboardShortcuts.enable(.cancelDictation) } else { KeyboardShortcuts.disable(.cancelDictation) }
             // Time passing, so the automatic stops still happen if the Microphone stops sending levels.
@@ -47,8 +45,8 @@ struct ParlezApp: App {
         self.dictation = dictation
         island = Island(dictation: dictation)
         self.setup = setup
-        self.transcriber = transcriber
         setup.start()
+        setup.applyRemoveFillers()
     }
 
     static let retoucheKey = "retouche"
@@ -66,14 +64,6 @@ struct ParlezApp: App {
 
     static let removeFillersKey = "removeFillers"
 
-    /// Hands the stored Remove fillers setting to the Transcriber and, while it is on, prepares Uhm's model.
-    /// At launch (`download: false`) only a model already on disk is loaded, so launch never downloads.
-    static func applyRemoveFillers(to transcriber: VozTranscriber, download: Bool) {
-        let on = UserDefaults.standard.bool(forKey: removeFillersKey)
-        transcriber.removesFillers = on
-        if on, download || transcriber.isFillerModelDownloaded { Task { await transcriber.prepareFillerModel() } }
-    }
-
     var body: some Scene {
         MenuBarExtra {
             SettingsMenuItem()
@@ -87,7 +77,7 @@ struct ParlezApp: App {
         } label: {
             MenuBarIcon(dictation: dictation)
         }
-        Settings { SettingsView(dictation: dictation, transcriber: transcriber, retoucher: retoucher) }
+        Settings { SettingsView(dictation: dictation, setup: setup, retoucher: retoucher) }
     }
 }
 

@@ -28,6 +28,15 @@ final class Setup {
     private(set) var modelProgress: Double?
     private(set) var modelReady = false
     private(set) var modelFailed = false
+    /// Remove fillers' model, prepared outside Setup while the switch is on: the download fraction while it
+    /// downloads, nil otherwise (also while a model already on disk loads).
+    private(set) var fillerModelProgress: Double?
+    private(set) var fillerModelReady = false
+    /// What went wrong preparing Remove fillers' model; nil unless it failed.
+    private(set) var fillerModelFailure: FillerModelFailure?
+    private var preparingFillerModel = false
+
+    enum FillerModelFailure { case download, load }
 
     /// The first step that is not satisfied, or nil when Setup is complete.
     var current: Step? {
@@ -96,6 +105,37 @@ final class Setup {
             modelFailed = true
             show()
         }
+    }
+
+    /// The one path for Remove fillers, at launch and whenever its switch changes: while the switch is on, prepares
+    /// Uhm's model (downloading it if missing, since the user chose it), and only then turns the Transcriber's flag on.
+    func applyRemoveFillers() {
+        let on = { UserDefaults.standard.bool(forKey: ParlezApp.removeFillersKey) }
+        transcriber.removesFillers = on() && fillerModelReady
+        guard on(), !fillerModelReady else { return }
+        Task {
+            await prepareFillerModel()
+            transcriber.removesFillers = on() && fillerModelReady
+        }
+    }
+
+    private func prepareFillerModel() async {
+        guard !preparingFillerModel else { return }
+        preparingFillerModel = true
+        fillerModelFailure = nil
+        let downloads = !VozTranscriber.isFillerModelDownloaded
+        if downloads { fillerModelProgress = 0 }
+        do {
+            try await transcriber.prepareFillerModel { fraction in
+                Task { @MainActor in if self.fillerModelProgress != nil { self.fillerModelProgress = fraction } }
+            }
+            fillerModelReady = true
+        } catch {
+            NSLog("Parlez: preparing the filler model failed: \(error)")
+            fillerModelFailure = downloads ? .download : .load
+        }
+        fillerModelProgress = nil
+        preparingFillerModel = false
     }
 
     func requestMicrophone() {

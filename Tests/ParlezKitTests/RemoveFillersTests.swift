@@ -1,6 +1,5 @@
 import ParlezKit
 import Testing
-import Uhm
 import Voz
 
 struct RemoveFillersTests {
@@ -14,9 +13,7 @@ struct RemoveFillersTests {
         Word(text: "Monday.", start: 2.0, end: 2.6),
     ]
 
-    func filler(_ start: Double, _ end: Double) -> Uhm.Detection {
-        Uhm.Detection(start: start, end: end, confidence: 0.9, type: nil)
-    }
+    func filler(_ start: Double, _ end: Double) -> ClosedRange<Double> { start...end }
 
     @Test func dropsAWordFullyInsideAFiller() {
         #expect(removeFillers(text: text, words: words, fillers: [filler(0.4, 0.9)]) == "So we ship Monday.")
@@ -45,9 +42,12 @@ struct RemoveFillersTests {
     }
 
     /// Voz clamps the last words to the end of the Recording, which can leave them without duration.
-    @Test func keepsAWordWithoutDuration() {
-        let words = words + [Word(text: "Bye.", start: 3.0, end: 3.0)]
-        #expect(removeFillers(text: text + " Bye.", words: words, fillers: []) == text + " Bye.")
-        #expect(removeFillers(text: text + " Bye.", words: words, fillers: [filler(0.4, 0.9)]) == "So we ship Monday. Bye.")
+    @Test func dropsAWordWithoutDurationInsideAFillerAndKeepsOneOutside() {
+        let words = [
+            Word(text: "So", start: 0.0, end: 0.3),
+            Word(text: "uh", start: 0.6, end: 0.6),
+            Word(text: "Bye.", start: 3.0, end: 3.0),
+        ]
+        #expect(removeFillers(text: "So uh Bye.", words: words, fillers: [filler(0.4, 0.9)]) == "So Bye.")
     }
 }

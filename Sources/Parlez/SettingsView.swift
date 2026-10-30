@@ -6,7 +6,7 @@ import SwiftUI
 /// The Settings window: the Dictation shortcut, Launch at login, Remove fillers and Retouche.
 struct SettingsView: View {
     let dictation: Dictation
-    let transcriber: VozTranscriber
+    let setup: Setup
     let retoucher: any Retoucher
     @AppStorage(ParlezApp.removeFillersKey) private var removeFillersOn = false
     @State private var loginItemStatus = SMAppService.mainApp.status
@@ -30,16 +30,17 @@ struct SettingsView: View {
                 .toggleStyle(.switch)
             Text("Leaves out “uh”, “um” and “hmm” that Voz lets through, by listening for them in your Recording. Runs on this Mac. One-time 45 MB download.")
                 .caption()
-            if removeFillersOn, transcriber.fillerModelFailed {
-                Text("The download failed. Check your connection.").font(.caption).foregroundStyle(.red)
-                Button("Try again") { Task { await transcriber.prepareFillerModel() } }
-            } else if removeFillersOn, let progress = transcriber.fillerModelProgress {
+            if removeFillersOn, let failure = setup.fillerModelFailure {
+                Text(failure == .download ? "The download failed. Check your connection." : "Couldn’t load the filler model.")
+                    .font(.caption).foregroundStyle(.red)
+                Button("Try again") { setup.applyRemoveFillers() }
+            } else if removeFillersOn, let progress = setup.fillerModelProgress {
                 ProgressView(value: progress)
             }
             Divider()
             Toggle(isOn: $retoucheOn) { HStack(spacing: 6) { Text("Retouche"); BetaBadge() } }
-            .toggleStyle(.switch)
-            .disabled(unavailableReason != nil)
+                .toggleStyle(.switch)
+                .disabled(unavailableReason != nil)
             Text("Applies your self-corrections before pasting (“red, oh wait, green” becomes “green”). Runs on this Mac with Apple Intelligence, and takes a little longer.")
                 .caption()
             if let unavailableReason {
@@ -60,13 +61,11 @@ struct SettingsView: View {
         .onAppear {
             loginItemStatus = SMAppService.mainApp.status
             unavailableReason = retoucher.unavailableReason
-            // Launch only loads a model already on disk; a missing one downloads here, with its progress shown.
-            if removeFillersOn { Task { await transcriber.prepareFillerModel() } }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             unavailableReason = retoucher.unavailableReason
         }
-        .onChange(of: removeFillersOn) { ParlezApp.applyRemoveFillers(to: transcriber, download: true) }
+        .onChange(of: removeFillersOn) { setup.applyRemoveFillers() }
         .onChange(of: retoucheOn) { ParlezApp.applyRetouche(to: dictation) }
         .onChange(of: ownShortcut) { ParlezApp.applyRetouche(to: dictation) }
     }

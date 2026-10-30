@@ -37,14 +37,14 @@ Removing fillers happens before Retouche, so a Dictation can use both: Retouche 
 ## Implementation Decisions
 
 - **Where it runs:** in the Transcriber adapter. The Dictation core keeps receiving a Transcript as text, and its rules (empty Transcript → `nothingHeard`, Retouche, word count, last Transcript) apply unchanged. The Island doesn't change.
-- **`VozTranscriber`** gets a "remove fillers" flag the app sets from Settings. When the flag is on and Uhm's model is loaded, it runs `voz.transcribe(samples:sampleRate:)` and `uhm.analyze(samples:sampleRate:options:)` on the same Recording concurrently. It then removes fillers from Voz's words. When the flag is off, the model isn't loaded, or Uhm throws, it returns Voz's `.text` as today.
+- **`VozTranscriber`** gets a "remove fillers" flag the app sets once Uhm's model is ready and the switch is on. When the flag is on, it runs `voz.transcribe(samples:sampleRate:)` and `uhm.analyze(samples:sampleRate:options:)` on the same Recording concurrently. It then removes fillers from Voz's words. When the flag is off or Uhm throws, it returns Voz's `.text` as today.
 - **Removing fillers** is one pure function in ParlezKit, taking Voz's text, Voz's words (with start and end times) and Uhm's filler spans, and returning the Transcript:
-  - A word is dropped only when it lies fully inside a filler span. This is the "word fully inside filler" rule of `Uhm.reconcileWords`; use that function rather than reimplementing it (map Voz `Word` to `Uhm.WordRange`, keep the words that survive).
+  - A word is dropped only when some filler span contains it (`span.start <= word.start && word.end <= span.end`), including a word without duration. This is the only drop case of `Uhm.reconcileWords`; we don't call it because its other cases only trim timings we don't use, and it also drops words without duration.
   - When no word is dropped, return Voz's `.text` unchanged.
   - Otherwise, join the surviving words with single spaces. (Voz's words carry their punctuation, so this matches `.text` apart from the dropped words.)
 - **Uhm options:** `bias: .precision` (0.75, the SDK's recommendation for automatic cuts), `includeTypes: false` (the type labels are unreliable and the labeler costs time). Uhm's "and"-as-filler class can't be told apart without types; the drop-only-when-fully-inside rule plus precision is the guard, and the hand-check watches for lost "and"s.
-- **The model:** one `Uhm` instance owned by the app. Turning the switch on downloads the model (`download(progress:)`) if it is missing, then loads it (`waitUntilLoaded()`); at launch with the switch on and the model on disk, it loads in the background. The flag only takes effect once loaded.
-- **Settings** (below "Launch at login", above the Retouche divider): a divider, then the "Remove fillers" switch with the same small "beta" badge as Retouche and the caption "Leaves out “uh”, “um” and “hmm” that Voz lets through, by listening for them in your Recording. Runs on this Mac. One-time 45 MB download." While downloading: a progress bar. On failure: "The download failed. Check your connection." and a "Try again" button. Stored in user defaults.
+- **The model:** one `Uhm` instance in `VozTranscriber`, which offers `prepareFillerModel(progress:)`: download the model (`download(progress:)`) if it is missing, then load it by analyzing a short silence (Uhm loads lazily on the first `analyze`). The app prepares it on one path, when the switch turns on and at launch with the switch on, downloading it if missing since the user chose it. Its progress, ready and failed state lives in the app next to Setup's, and the flag is set only once it is ready.
+- **Settings** (below "Launch at login", above the Retouche divider): a divider, then the "Remove fillers" switch with the same small "beta" badge as Retouche and the caption "Leaves out “uh”, “um” and “hmm” that Voz lets through, by listening for them in your Recording. Runs on this Mac. One-time 45 MB download." While downloading (not while loading a model already on disk): a progress bar. On a failed download: "The download failed. Check your connection."; on a failed load of a model on disk: "Couldn't load the filler model."; either with a "Try again" button. Stored in user defaults.
 - **Package:** add the `Uhm` product of `desert-ant-core` (already a dependency) to ParlezKit.
 - **ADR 0003** records the choice; it reopens the Uhm option ADR 0002 set aside, for filler removal only.
 
@@ -56,6 +56,7 @@ Removing fillers happens before Retouche, so a Dictation can use both: Retouche 
   - No filler spans, or spans covering no word: Voz's text is returned unchanged.
   - Every word inside filler spans: the result is empty.
   - Punctuation attached to kept words stays ("Monday." keeps its full stop).
+  - A word without duration is dropped inside a filler span and kept outside one.
 - **By hand**, added to the README checklist: the switch and its download (progress, failure and retry), Dictations with fillers in English, Dutch and mixed with the switch on and off, a sentence with a real "and" next to a pause, and Remove fillers together with Retouche.
 - The `VozTranscriber` wiring and the `Uhm` model management are thin wrappers checked by hand.
 

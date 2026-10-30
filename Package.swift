@@ -23,7 +23,6 @@ let package = Package(
             dependencies: [
                 "ParlezKit",
                 .product(name: "Voz", package: "desert-ant-core"),
-                .product(name: "Uhm", package: "desert-ant-core"),
             ]
         ),
     ]
