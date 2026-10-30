@@ -80,7 +80,7 @@ The design canvas has a working prototype of every state: https://claude.ai/arti
   - **`automaticStop`**: while recording, the earliest pending automatic stop, as an instant plus a reason (`silence` or `lengthLimit`); nil otherwise. The silence stop is pending only while the current run of silence lasts. The Island shows the countdown when the instant is 10 s away or less. The core's own stop rule uses the same values, so the countdown and the actual stop cannot disagree.
 - **IslandLayout**: the panel's frame stays fixed at the Island's largest size, so the panel never resizes mid-animation. Starting sizes, in points, tuned by eye:
   - beside the notch: the Island reaches 85 pt past each side of the notch while working; a message row is 36 pt below the notch, a two-line row 52 pt; a two-line row widens the Island a further 13 pt each side; the curved top corners need 7 pt outside each side. The frame is therefore the notch width plus 210 pt by the notch height plus 52 pt.
-  - floating: a 167 × 36 pt pill while working, growing to 312 × 52 pt for a two-line message; the frame is 312 × 52 pt, 6 pt below the menu bar.
+  - floating: a 167 × 36 pt pill while working; a message or countdown widens it to 312 pt and adds its row (36 or 52 pt) below the working row, as under the notch, or is the whole pill once the Dictation has ended. The frame fits the working row plus a two-line row, with room for the ±6 pt busy shake: 324 × 88 pt, 6 pt below the menu bar.
 - **Island view**: the compact working shape, waveform, shimmer, countdown ring and message rows are drawn in the Island view, driven only by the core's state, level, signal, `recordingStartedAt` and `automaticStop`. The waveform is driven by the live level, with per-bar variation so it doesn't move as one block. The existing level gain constant and its hand-tuning note carry over. Durations: confirmations and the busy message about 1.5 s, error and Setup messages about 3 s.
 - **Colours**: the Island stays true black. Recording red, confirmation green and warning amber are the macOS system red, green and yellow. Secondary text is white at about 60 %.
 - **Menu bar icon**: the app tints the menu bar icon red while the state is recording.
@@ -95,7 +95,7 @@ The design canvas has a working prototype of every state: https://claude.ai/arti
   - each failure raises its error reason (the three existing error assertions change from text to reasons);
   - `recordingStartedAt` is set while recording and cleared after;
   - `automaticStop` reports the length limit while there is sound, switches to the silence stop when silence starts, goes back when sound returns, is nil outside recording, and the automatic stop happens at the instant it reported.
-- **IslandLayout**, alongside the existing layout tests: the two existing cases get the new frames (on the 14" example: 430 × 90 pt at the top centre; on the external display: 312 × 52 pt, 6 pt below the menu bar).
+- **IslandLayout**, alongside the existing layout tests: the two existing cases get the new frames (on the 14" example: 430 × 90 pt at the top centre; on the external display: 324 × 88 pt, 6 pt below the menu bar).
 - **By hand**, on the README checklist: everything the Island draws, its animations, the menu bar icon, and both screen types. These are thin renderings of tested values.
 
 ## Out of Scope
@@ -112,4 +112,4 @@ The design canvas has a working prototype of every state: https://claude.ai/arti
 
 - This supersedes Parlez spec stories 21 to 24 (level meter, spinner, shake and red message), keeping their intent.
 - "Nothing heard" was not on the design canvas; it closes the one ending that otherwise collapses without a word.
-- Copy for the fix lines: microphone didn't start → "Check System Settings › Privacy & Security › Microphone"; couldn't transcribe → "Nothing was pasted. Try that Dictation again."; paste failed → "The Transcript is on your clipboard: press ⌘V"; Setup unfinished → "Open Parlez from the menu bar".
+- Copy for the fix lines: microphone didn't start → "System Settings › Privacy › Microphone"; couldn't transcribe → "Nothing was pasted. Try that Dictation again."; paste failed → "The Transcript is on your clipboard: press ⌘V"; Setup unfinished → "Open Parlez from the menu bar".

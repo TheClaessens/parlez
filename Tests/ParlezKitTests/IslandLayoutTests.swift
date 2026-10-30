@@ -26,6 +26,6 @@ struct IslandLayoutTests {
             topRightArea: nil)
 
         #expect(layout.notch == nil)
-        #expect(layout.frame == CGRect(x: 2316, y: 997, width: 312, height: 52))
+        #expect(layout.frame == CGRect(x: 2310, y: 961, width: 324, height: 88))
     }
 }

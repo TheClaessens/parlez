@@ -14,26 +14,30 @@ public struct IslandLayout: Equatable, Sendable {
     static let rowHeight: CGFloat = 36
     static let twoLineRowHeight: CGFloat = 52
     static let twoLineOverhang: CGFloat = 13
-    /// The width of each top corner that curves out into the screen edge.
+    /// The width of each top corner that curves out into the screen edge, and the radius of the bottom corners.
     static let topCorner: CGFloat = 7
+    static let bottomCorner: CGFloat = 14
+    /// How far the Island at its widest reaches past each side of the notch.
+    static let reach = overhang + twoLineOverhang + topCorner
     /// On a screen without a notch: the working pill's width, its width with a message, and its gap below the menu bar.
     static let floatingWidth: CGFloat = 167
     static let floatingMessageWidth: CGFloat = 312
     static let floatingGap: CGFloat = 6
+    /// How far the busy shake moves the Island to each side.
+    static let shake: CGFloat = 6
 
     public init(screenFrame: CGRect, visibleFrame: CGRect, safeAreaTop: CGFloat, topLeftArea: CGRect?, topRightArea: CGRect?) {
         if safeAreaTop > 0, let left = topLeftArea, let right = topRightArea {
             // The notch is centred: it is whatever the menu bar areas either side of it leave over.
             let notch = CGSize(width: screenFrame.width - left.width - right.width, height: safeAreaTop)
-            let reach = Self.overhang + Self.twoLineOverhang + Self.topCorner
-            let size = CGSize(width: notch.width + 2 * reach, height: notch.height + Self.twoLineRowHeight)
+            let size = CGSize(width: notch.width + 2 * Self.reach, height: notch.height + Self.twoLineRowHeight)
             self.notch = notch
             frame = CGRect(x: screenFrame.midX - size.width / 2, y: screenFrame.maxY - size.height, width: size.width, height: size.height)
         } else {
+            // The working row with a two-line message row below it, with room to shake.
+            let size = CGSize(width: Self.floatingMessageWidth + 2 * Self.shake, height: Self.rowHeight + Self.twoLineRowHeight)
             notch = nil
-            frame = CGRect(
-                x: screenFrame.midX - Self.floatingMessageWidth / 2, y: visibleFrame.maxY - Self.floatingGap - Self.twoLineRowHeight,
-                width: Self.floatingMessageWidth, height: Self.twoLineRowHeight)
+            frame = CGRect(x: screenFrame.midX - size.width / 2, y: visibleFrame.maxY - Self.floatingGap - size.height, width: size.width, height: size.height)
         }
     }
 
@@ -116,46 +120,44 @@ struct IslandView: View {
     /// The automatic stop being counted down to, once it is `countdownLead` away or less.
     @State private var countdown: Dictation.AutomaticStop?
 
-    /// How long a confirmation or the busy message stays up, and how long an error or Setup message does.
-    static let confirmationDuration: Duration = .seconds(1.5)
-    static let messageDuration: Duration = .seconds(3)
     /// Scales the Microphone level (RMS, speech around 0.02...0.2) onto the waveform.
     /// ponytail: tuned by eye against one built-in mic; adjust if the waveform sits too low or pins.
     static let meterGain: Float = 2.5
     /// How long before an automatic stop its countdown shows.
-    static let countdownLead: Duration = .seconds(10)
+    nonisolated static let countdownLead: Duration = .seconds(10)
 
     private var expanded: Bool {
         appeared && islandIsOut(dictation.state, showingSignal: showingSignal)
     }
 
     private var working: Bool {
-        dictation.state == .recording || dictation.state == .transcribing
+        islandIsOut(dictation.state, showingSignal: false)
     }
 
-    /// The Island's size: beside the notch at notch height while working, plus a row below it for a message;
-    /// floating, a pill that widens for a message. Collapsed, it shrinks into the notch (or to nothing).
+    /// The row below the working row: the latest signal's message, else the countdown to an automatic stop.
+    private var shown: Message? {
+        message ?? countdown.map(Message.init(countdown:))
+    }
+
+    /// The Island's size: beside the notch at notch height, a pill while working when floating; plus the shown row
+    /// below, which widens it. Collapsed, it shrinks into the notch (or to nothing).
     private var size: CGSize {
+        let shown = shown
+        let below = shown.map { $0.twoLines ? IslandLayout.twoLineRowHeight : IslandLayout.rowHeight } ?? 0
         if let notch {
-            let corners = 2 * IslandLayout.topCorner
-            guard expanded else { return CGSize(width: notch.width + corners, height: notch.height) }
-            let twoLines = message?.twoLines == true
-            return CGSize(
-                width: notch.width + 2 * (IslandLayout.overhang + (twoLines ? IslandLayout.twoLineOverhang : 0)) + corners,
-                height: notch.height + (twoLines ? IslandLayout.twoLineRowHeight : message != nil || countdown != nil ? IslandLayout.rowHeight : 0))
+            guard expanded else { return CGSize(width: notch.width + 2 * IslandLayout.topCorner, height: notch.height) }
+            let reach = IslandLayout.reach - (shown?.twoLines == true ? 0 : IslandLayout.twoLineOverhang)
+            return CGSize(width: notch.width + 2 * reach, height: notch.height + below)
         }
         guard expanded else { return .zero }
-        guard let message else {
-            return CGSize(width: countdown == nil ? IslandLayout.floatingWidth : IslandLayout.floatingMessageWidth, height: IslandLayout.rowHeight)
-        }
         return CGSize(
-            width: IslandLayout.floatingMessageWidth,
-            height: message.twoLines ? IslandLayout.twoLineRowHeight : IslandLayout.rowHeight)
+            width: shown == nil ? IslandLayout.floatingWidth : IslandLayout.floatingMessageWidth,
+            height: (working ? IslandLayout.rowHeight : 0) + below)
     }
 
     var body: some View {
         ZStack(alignment: .top) {
-            (notch == nil ? AnyShape(Capsule()) : AnyShape(NotchShape())).fill(.black)
+            (notch == nil ? AnyShape(RoundedRectangle(cornerRadius: IslandLayout.rowHeight / 2)) : AnyShape(NotchShape())).fill(.black)
             if expanded { content }
         }
         .frame(width: size.width, height: size.height)
@@ -165,8 +167,8 @@ struct IslandView: View {
         .animation(.spring(duration: 0.35), value: size)
         .environment(\.colorScheme, .dark)
         .onAppear { appeared = true }
-        .onChange(of: dictation.recordingStartedAt) { started, _ in
-            if let started { frozenElapsed = ContinuousClock.now - started }
+        .onChange(of: dictation.recordingStartedAt) { previousStart, _ in
+            if let previousStart { frozenElapsed = ContinuousClock.now - previousStart }
         }
         .task(id: dictation.automaticStop) {
             countdown = nil
@@ -178,41 +180,42 @@ struct IslandView: View {
             showingSignal = dictation.signal != nil
             message = nil
             guard let signal = dictation.signal else { return }
-            message = Message(signal.kind)
+            let message = Message(signal.kind)
+            self.message = message
             if signal.kind == .busy { withAnimation(.linear(duration: 0.4)) { shakes += 1 } }
-            try? await Task.sleep(for: message?.twoLines == true ? Self.messageDuration : Self.confirmationDuration)
+            try? await Task.sleep(for: message.duration)
             if !Task.isCancelled {
                 showingSignal = false
-                message = nil
+                self.message = nil
             }
         }
     }
 
-    @ViewBuilder private var content: some View {
-        if let notch {
+    /// The working row (beside the notch, or the pill's top row), and the shown row below it.
+    private var content: some View {
+        TimelineView(.animation(paused: !working)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
             VStack(spacing: 0) {
-                ZStack { if working { workingRow(bars: 9) } }
-                    .frame(height: notch.height)
-                if let message { messageRow(message) } else if let countdown { countdownRow(countdown) }
+                if let notch {
+                    ZStack { if working { workingRow(bars: 9, t: t) } }
+                        .frame(height: notch.height)
+                } else if working {
+                    workingRow(bars: 7, t: t).frame(height: IslandLayout.rowHeight)
+                }
+                if let shown { messageRow(shown) }
             }
-            .padding(.horizontal, IslandLayout.topCorner)
-        } else if let message {
-            messageRow(message)
-        } else if let countdown {
-            countdownRow(countdown)
-        } else if working {
-            workingRow(bars: 7).frame(height: IslandLayout.rowHeight)
+            .padding(.horizontal, notch == nil ? 0 : IslandLayout.topCorner)
         }
     }
 
     /// One line: the icon, the title and the detail side by side. Two lines: the icon, then the title
     /// with the fix line underneath, shrinking a little rather than cutting off.
     @ViewBuilder private func messageRow(_ message: Message) -> some View {
-        let icon = message.icon.map { Image(systemName: $0).foregroundStyle(message.tint) }
+        let icon = icon(message)
         let title = Text(message.title).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
         if message.twoLines {
             HStack(spacing: 10) {
-                icon?.font(.system(size: 17))
+                icon.font(.system(size: 17))
                 VStack(alignment: .leading, spacing: 1) {
                     title
                     Text(message.detail).font(.system(size: 11)).foregroundStyle(.white.opacity(0.6))
@@ -224,10 +227,10 @@ struct IslandView: View {
             .frame(height: IslandLayout.twoLineRowHeight)
         } else {
             HStack(spacing: 8) {
-                icon?.font(.system(size: 14))
+                icon.font(.system(size: 14))
                 title
                 if !message.detail.isEmpty {
-                    Text(message.detail).font(.system(size: 12)).foregroundStyle(.white.opacity(0.6))
+                    Text(message.detail).font(.system(size: 12).monospacedDigit()).foregroundStyle(.white.opacity(0.6))
                 }
             }
             .lineLimit(1)
@@ -235,50 +238,42 @@ struct IslandView: View {
         }
     }
 
-    /// An amber ring that runs out with the seconds left, and what is about to stop the Dictation.
-    private func countdownRow(_ stop: Dictation.AutomaticStop) -> some View {
-        TimelineView(.animation) { _ in
-            let left = max(.zero, stop.at - ContinuousClock.now)
-            HStack(spacing: 8) {
-                ZStack {
-                    Circle().stroke(.yellow.opacity(0.25), lineWidth: 2)
-                    Circle().trim(from: 0, to: left / Self.countdownLead).stroke(.yellow, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                }
-                .frame(width: 14, height: 14)
-                Text(stop.reason == .silence ? "No speech" : "Time limit").font(.system(size: 12, weight: .semibold)).foregroundStyle(.white)
-                Text("stopping in \(Int((left / .seconds(1)).rounded(.up))) s").font(.system(size: 12).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.6))
+    /// A symbol in the message's colour, or an amber ring that runs out with the seconds left.
+    @ViewBuilder private func icon(_ message: Message) -> some View {
+        switch message.icon {
+        case .symbol(let name): Image(systemName: name).foregroundStyle(message.tint)
+        case .ring(let left):
+            ZStack {
+                Circle().stroke(.yellow.opacity(0.25), lineWidth: 2)
+                Circle().trim(from: 0, to: left).stroke(.yellow, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
             }
-            .lineLimit(1)
+            .frame(width: 14, height: 14)
+        case nil: EmptyView()
         }
-        .frame(height: IslandLayout.rowHeight)
     }
 
     /// The dot (or spinner) and the elapsed time on the left, the waveform (or shimmer) on the right.
-    private func workingRow(bars: Int) -> some View {
+    private func workingRow(bars: Int, t: Double) -> some View {
         let recording = dictation.state == .recording
-        let level = dictation.level < Dictation.silenceThreshold ? 0 : CGFloat(min(1, dictation.level.squareRoot() * Self.meterGain))
-        return TimelineView(.animation) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            let elapsed: Duration = recording ? dictation.recordingStartedAt.map { ContinuousClock.now - $0 } ?? .zero : frozenElapsed
-            HStack {
-                HStack(spacing: 8) {
-                    ZStack { if recording { RecordingDot(t: t) } else { Spinner(t: t) } }.frame(width: 12, height: 12)
-                    Text(elapsed.formatted(.time(pattern: .minuteSecond(padMinuteToLength: 1, roundFractionalSeconds: .towardZero))))
-                        .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(.white.opacity(recording ? 1 : 0.6))
-                }
-                Spacer(minLength: 0)
-                HStack(spacing: 3) {
-                    ForEach(0..<bars, id: \.self) { bar in
-                        Self.bar(bar, t: t, level: recording ? level : nil)
-                    }
-                }
-                .animation(.easeOut(duration: 0.08), value: level)
+        let level = dictation.automaticStop?.reason == .silence ? 0 : CGFloat(min(1, dictation.level.squareRoot() * Self.meterGain))
+        let elapsed: Duration = recording ? dictation.recordingStartedAt.map { ContinuousClock.now - $0 } ?? .zero : frozenElapsed
+        return HStack {
+            HStack(spacing: 8) {
+                ZStack { if recording { RecordingDot(t: t) } else { Spinner(t: t) } }.frame(width: 12, height: 12)
+                Text(elapsed.formatted(.time(pattern: .minuteSecond(padMinuteToLength: 1, roundFractionalSeconds: .towardZero))))
+                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.white.opacity(recording ? 1 : 0.6))
             }
-            .padding(.horizontal, 15)
+            Spacer(minLength: 0)
+            HStack(spacing: 3) {
+                ForEach(0..<bars, id: \.self) { bar in
+                    Self.bar(bar, t: t, level: recording ? level : nil)
+                }
+            }
+            .animation(.easeOut(duration: 0.08), value: level)
         }
+        .padding(.horizontal, 15)
     }
 
     /// One bar of the waveform, driven by the level while recording (a still dot at level 0); without a level, one step of the
@@ -300,40 +295,51 @@ struct IslandView: View {
 }
 
 /// What a message row says: an optional icon in its colour, the title in white, and a detail in grey,
-/// beside the title on one line or underneath it as the fix line. The Island owns all this wording.
-private struct Message: Equatable {
-    var icon: String?
+/// beside the title on one line or underneath it as the fix line; and how long it stays up.
+/// The Island owns all this wording.
+private struct Message {
+    enum Icon { case symbol(String), ring(left: Double) }
+    var icon: Icon?
     var tint: Color = .white
     let title: String
     let detail: String
     var twoLines = false
+    var duration: Duration = .seconds(1.5)
 }
 
 extension Message {
-    /// Errors are red circles, the Setup step left is an amber triangle; both say what to do on a second line.
+    /// The countdown to an automatic stop: the ring, what is about to stop the Dictation, and the seconds left.
+    init(countdown stop: Dictation.AutomaticStop) {
+        let left = max(.zero, stop.at - ContinuousClock.now)
+        self.init(
+            icon: .ring(left: left / IslandView.countdownLead), title: stop.reason == .silence ? "No speech" : "Time limit",
+            detail: "stopping in \(Int((left / .seconds(1)).rounded(.up))) s")
+    }
+
+    /// Errors are red circles, the Setup step left is an amber triangle; both say what to do on a second line, for 3 s.
     init(_ kind: Dictation.Signal.Kind) {
         switch kind {
         case .busy:
             self.init(title: "Still transcribing", detail: "one moment")
         // How a Dictation ended: a green check for a paste, grey circles otherwise.
         case .pasted(let words):
-            self.init(icon: "checkmark.circle.fill", tint: .green, title: "Pasted", detail: words == 1 ? "1 word" : "\(words) words")
+            self.init(icon: .symbol("checkmark.circle.fill"), tint: .green, title: "Pasted", detail: words == 1 ? "1 word" : "\(words) words")
         case .cancelled:
-            self.init(icon: "xmark.circle.fill", tint: .white.opacity(0.6), title: "Cancelled", detail: "nothing pasted")
+            self.init(icon: .symbol("xmark.circle.fill"), tint: .white.opacity(0.6), title: "Cancelled", detail: "nothing pasted")
         case .nothingHeard:
-            self.init(icon: "waveform.circle.fill", tint: .white.opacity(0.6), title: "Nothing heard", detail: "")
+            self.init(icon: .symbol("waveform.circle.fill"), tint: .white.opacity(0.6), title: "Nothing heard", detail: "")
         case .setupUnfinished:
             self.init(
-                icon: "exclamationmark.triangle.fill", tint: .yellow, title: "Finish Setup to dictate",
-                detail: "Open Parlez from the menu bar", twoLines: true)
+                icon: .symbol("exclamationmark.triangle.fill"), tint: .yellow, title: "Finish Setup to dictate",
+                detail: "Open Parlez from the menu bar", twoLines: true, duration: .seconds(3))
         case .error(let reason):
             let (title, fix) =
                 switch reason {
-                case .microphoneDidNotStart: ("Microphone didn't start", "Check System Settings › Privacy & Security › Microphone")
+                case .microphoneDidNotStart: ("Microphone didn't start", "System Settings › Privacy › Microphone")
                 case .couldNotTranscribe: ("Couldn't transcribe", "Nothing was pasted. Try that Dictation again.")
                 case .pasteFailed: ("Paste failed", "The Transcript is on your clipboard: press ⌘V")
                 }
-            self.init(icon: "exclamationmark.circle.fill", tint: .red, title: title, detail: fix, twoLines: true)
+            self.init(icon: .symbol("exclamationmark.circle.fill"), tint: .red, title: title, detail: fix, twoLines: true, duration: .seconds(3))
         }
     }
 }
@@ -370,8 +376,8 @@ private struct NotchShape: Shape {
         var path = Path()
         path.move(to: CGPoint(x: rect.minX, y: rect.minY))
         path.addArc(tangent1End: CGPoint(x: left, y: rect.minY), tangent2End: CGPoint(x: left, y: rect.maxY), radius: corner)
-        path.addArc(tangent1End: CGPoint(x: left, y: rect.maxY), tangent2End: CGPoint(x: right, y: rect.maxY), radius: 14)
-        path.addArc(tangent1End: CGPoint(x: right, y: rect.maxY), tangent2End: CGPoint(x: right, y: rect.minY), radius: 14)
+        path.addArc(tangent1End: CGPoint(x: left, y: rect.maxY), tangent2End: CGPoint(x: right, y: rect.maxY), radius: IslandLayout.bottomCorner)
+        path.addArc(tangent1End: CGPoint(x: right, y: rect.maxY), tangent2End: CGPoint(x: right, y: rect.minY), radius: IslandLayout.bottomCorner)
         path.addArc(tangent1End: CGPoint(x: right, y: rect.minY), tangent2End: CGPoint(x: rect.maxX, y: rect.minY), radius: corner)
         path.closeSubpath()
         return path
@@ -387,6 +393,6 @@ private struct Shake: GeometryEffect {
     }
 
     func effectValue(size: CGSize) -> ProjectionTransform {
-        ProjectionTransform(CGAffineTransform(translationX: 6 * sin(shakes * .pi * 6), y: 0))
+        ProjectionTransform(CGAffineTransform(translationX: IslandLayout.shake * sin(shakes * .pi * 6), y: 0))
     }
 }
