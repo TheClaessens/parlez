@@ -1,6 +1,6 @@
 # Remove fillers: leave out the "uh"s Voz lets through
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
