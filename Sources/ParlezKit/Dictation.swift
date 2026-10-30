@@ -27,7 +27,8 @@ public struct Recording: Sendable {
 /// It makes no OS calls of its own; it only talks to the adapters it is given.
 @MainActor @Observable
 public final class Dictation {
-    public enum State: Equatable, Sendable { case idle, recording, transcribing }
+    /// `unavailable` until Setup is complete.
+    public enum State: Equatable, Sendable { case unavailable, idle, recording, transcribing }
 
     /// A short-lived signal for the Island. Each one raised is a new value (its `raised` instant differs),
     /// so the Island can react to every raise and decide how long to show it.
@@ -37,7 +38,7 @@ public final class Dictation {
         public let raised: ContinuousClock.Instant
     }
 
-    public private(set) var state: State = .idle {
+    public private(set) var state: State = .unavailable {
         didSet {
             let recording = state == .recording
             guard recording != (oldValue == .recording) else { return }
@@ -96,9 +97,14 @@ public final class Dictation {
             state = .recording
         case .recording:
             await stop()
-        case .transcribing:
+        case .unavailable, .transcribing:
             raise(.busy)
         }
+    }
+
+    /// Setup is complete: the Dictation shortcut becomes available.
+    public func setupCompleted() {
+        if state == .unavailable { state = .idle }
     }
 
     /// A level reading from the Microphone while recording. Readings are also the core's sense of

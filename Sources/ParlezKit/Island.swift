@@ -58,8 +58,8 @@ public struct IslandLayout: Equatable, Sendable {
     }
 
     private func changed() {
-        // Move to the active menu bar's screen when a Dictation starts or a signal shows while idle.
-        if dictation.state == .recording || (dictation.state == .idle && dictation.signal != nil) { place() }
+        // Move to the active menu bar's screen when a Dictation starts, or when a signal shows outside one.
+        if dictation.state == .recording || (dictation.state != .transcribing && dictation.signal != nil) { place() }
         observe()
     }
 
@@ -94,16 +94,21 @@ struct IslandView: View {
 
     /// Lets the very first Island grow rather than appear at full size.
     @State private var appeared = false
+    /// True while the latest signal is up, which keeps the Island out even with no Dictation running.
+    @State private var showingSignal = false
     @State private var message: String?
     @State private var shakes: CGFloat = 0
 
-    /// How long an error message stays up.
+    /// How long a busy shake and an error message stay up.
+    static let shakeDuration: Duration = .seconds(0.6)
     static let messageDuration: Duration = .seconds(3)
     /// Scales the Microphone level (RMS, speech around 0.02...0.2) onto the meter.
     /// ponytail: tuned by eye against one built-in mic; adjust if the meter sits too low or pins.
     static let meterGain: Float = 2.5
 
-    private var expanded: Bool { appeared && (dictation.state != .idle || message != nil) }
+    private var expanded: Bool {
+        appeared && (dictation.state == .recording || dictation.state == .transcribing || showingSignal)
+    }
 
     var body: some View {
         let collapsed = notch ?? .zero
@@ -125,17 +130,18 @@ struct IslandView: View {
         .environment(\.colorScheme, .dark)
         .onAppear { appeared = true }
         .task(id: dictation.signal) {
-            guard let signal = dictation.signal else {
-                message = nil
-                return
-            }
-            switch signal.kind {
-            case .busy:
-                withAnimation(.linear(duration: 0.4)) { shakes += 1 }
-            case .error(let text):
+            showingSignal = dictation.signal != nil
+            message = nil
+            guard let signal = dictation.signal else { return }
+            if case .error(let text) = signal.kind {
                 message = text
-                try? await Task.sleep(for: Self.messageDuration)
-                if !Task.isCancelled { message = nil }
+            } else {
+                withAnimation(.linear(duration: 0.4)) { shakes += 1 }
+            }
+            try? await Task.sleep(for: message == nil ? Self.shakeDuration : Self.messageDuration)
+            if !Task.isCancelled {
+                showingSignal = false
+                message = nil
             }
         }
     }

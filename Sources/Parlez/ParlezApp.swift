@@ -6,10 +6,12 @@ import SwiftUI
 struct ParlezApp: App {
     let dictation: Dictation
     let island: Island
+    let setup: Setup
 
     init() {
         let microphone = AudioMicrophone()
-        let dictation = Dictation(microphone: microphone, transcriber: VozTranscriber(), inserter: PasteInserter())
+        let transcriber = VozTranscriber()
+        let dictation = Dictation(microphone: microphone, transcriber: transcriber, inserter: PasteInserter())
         microphone.onLevel = { level in Task { await dictation.microphoneLevel(level) } }
         KeyboardShortcuts.onKeyDown(for: .dictation) {
             Task { await dictation.shortcutPressed() }
@@ -23,6 +25,8 @@ struct ParlezApp: App {
         }
         self.dictation = dictation
         island = Island(dictation: dictation)
+        setup = Setup(dictation: dictation, transcriber: transcriber)
+        setup.start()
     }
 
     var body: some Scene {
