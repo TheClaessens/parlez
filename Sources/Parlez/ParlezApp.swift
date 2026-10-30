@@ -7,11 +7,14 @@ struct ParlezApp: App {
     let dictation: Dictation
     let island: Island
     let setup: Setup
+    let retoucher = makeRetoucher()
 
     init() {
         let microphone = AudioMicrophone()
         let transcriber = VozTranscriber()
-        let dictation = Dictation(microphone: microphone, transcriber: transcriber, inserter: PasteInserter())
+        let dictation = Dictation(
+            microphone: microphone, transcriber: transcriber, inserter: PasteInserter(), retoucher: retoucher)
+        dictation.retouche = SettingsView.retoucheSetting(UserDefaults.standard.bool(forKey: SettingsView.retoucheKey))
         let setup = Setup(dictation: dictation, transcriber: transcriber)
         microphone.onLevel = { level in Task { await dictation.microphoneLevel(level) } }
         KeyboardShortcuts.onKeyDown(for: .dictation) {
@@ -55,7 +58,7 @@ struct ParlezApp: App {
         } label: {
             MenuBarIcon(dictation: dictation)
         }
-        Settings { SettingsView() }
+        Settings { SettingsView(dictation: dictation, retoucher: retoucher) }
     }
 }
 

@@ -24,6 +24,20 @@ public struct Recording: Sendable {
     func insert(_ transcript: String) throws
 }
 
+/// Applies the speaker's self-corrections to a Transcript (Retouche).
+@MainActor public protocol Retoucher: AnyObject {
+    /// Why Retouche can't run on this Mac, for Settings; nil when it can.
+    var unavailableReason: String? { get }
+    /// Gets the model ready, so the next `retouch` doesn't pay for loading it.
+    func warmUp()
+    /// Returns the Retouched Transcript. Throws when the model fails or the Transcript is too long for it.
+    func retouch(_ transcript: String) async throws -> String
+}
+
+extension Retoucher {
+    public var isAvailable: Bool { unavailableReason == nil }
+}
+
 /// The Dictation core: every rule about when a Dictation starts, stops and what gets inserted.
 /// It makes no OS calls of its own; it only talks to the adapters it is given.
 @MainActor @Observable
@@ -77,8 +91,12 @@ public final class Dictation {
     @ObservationIgnored public var onRecordingChanged: (@MainActor (Bool) -> Void)?
     /// The last signal raised; cleared when the next Dictation starts.
     public private(set) var signal: Signal?
-    /// Kept for "Copy last Transcript".
+    /// Kept for "Copy last Transcript": what was inserted, the Retouched Transcript when Retouche ran.
     public private(set) var lastTranscript: String?
+
+    /// Which stops are retouched. The app sets it from Settings.
+    public enum RetoucheSetting: Equatable, Sendable { case off, onDictationShortcut, onOwnShortcut }
+    @ObservationIgnored public var retouche: RetoucheSetting = .off
 
     /// A Recording shorter than this is an accidental tap and is thrown away.
     public static let minimumRecording: Duration = .milliseconds(300)
@@ -86,6 +104,7 @@ public final class Dictation {
     private let microphone: any Microphone
     private let transcriber: any Transcriber
     private let inserter: any Inserter
+    private let retoucher: any Retoucher
     /// Reads the current instant (injected so tests control time), for the silence and length limits
     /// and the 0.3 s minimum.
     private let now: @MainActor () -> ContinuousClock.Instant
@@ -102,11 +121,13 @@ public final class Dictation {
         microphone: any Microphone,
         transcriber: any Transcriber,
         inserter: any Inserter,
+        retoucher: any Retoucher,
         now: @escaping @MainActor () -> ContinuousClock.Instant = { .now }
     ) {
         self.microphone = microphone
         self.transcriber = transcriber
         self.inserter = inserter
+        self.retoucher = retoucher
         self.now = now
     }
 
@@ -118,6 +139,7 @@ public final class Dictation {
             recordingStartedAt = now()
             signal = nil
             state = .recording
+            if retouche != .off, retoucher.isAvailable { retoucher.warmUp() }
         case .recording:
             await stop()
         case .unavailable:
@@ -163,8 +185,14 @@ public final class Dictation {
         }
         state = .transcribing
         defer { if state == .transcribing { state = .idle } }
-        guard let transcript = try? await transcriber.transcribe(recording) else {
+        guard var transcript = try? await transcriber.transcribe(recording) else {
             return raise(.error(.couldNotTranscribe))
+        }
+        // ponytail: Retouche runs inside transcribing until the Island gets its own retouching state.
+        if retouche == .onDictationShortcut, retoucher.isAvailable,
+            let retouched = try? await retoucher.retouch(transcript), Self.canTrust(retouched, from: transcript)
+        {
+            transcript = retouched
         }
         guard !transcript.allSatisfy(\.isWhitespace) else { return raise(.nothingHeard) }
         lastTranscript = transcript
@@ -172,6 +200,18 @@ public final class Dictation {
             try inserter.insert(transcript)
             raise(.pasted(words: transcript.split(whereSeparator: \.isWhitespace).count))
         } catch { raise(.error(.pasteFailed)) }
+    }
+
+    /// The fallback rule (from the prototype): a Retouche only deletes, so a Retouched Transcript that adds
+    /// line breaks, or whose words are less than 90 % from the Transcript, ran away (an email, an answer,
+    /// a translation) and the Transcript is inserted instead. An empty one is trusted: everything was filler.
+    private static func canTrust(_ retouched: String, from transcript: String) -> Bool {
+        let lineBreaks = { (text: String) in text.filter(\.isNewline).count }
+        let words = { (text: String) in text.lowercased().split { !$0.isLetter && !$0.isNumber && $0 != "'" } }
+        let spoken = Set(words(transcript))
+        let out = words(retouched)
+        return lineBreaks(retouched) <= lineBreaks(transcript)
+            && Double(out.filter(spoken.contains).count) >= 0.9 * Double(out.count)
     }
 
     /// Esc was pressed: cancel a recording Dictation, throwing its Recording away.

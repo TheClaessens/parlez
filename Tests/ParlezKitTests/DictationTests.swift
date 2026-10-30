@@ -6,12 +6,14 @@ struct DictationTests {
     let microphone = FakeMicrophone()
     let transcriber = FakeTranscriber()
     let inserter = FakeInserter()
+    let retoucher = FakeRetoucher()
     let clock = FakeClock()
     let dictation: Dictation
 
     init() {
         dictation = Dictation(
-            microphone: microphone, transcriber: transcriber, inserter: inserter, now: { [clock] in clock.now })
+            microphone: microphone, transcriber: transcriber, inserter: inserter, retoucher: retoucher,
+            now: { [clock] in clock.now })
         dictation.setupCompleted()
     }
 
@@ -43,7 +45,8 @@ struct DictationTests {
 
     @Test func beforeSetupIsCompleteThePressStartsNothingAndSignalsSetupUnfinished() async {
         let dictation = Dictation(
-            microphone: microphone, transcriber: transcriber, inserter: inserter, now: { [clock] in clock.now })
+            microphone: microphone, transcriber: transcriber, inserter: inserter, retoucher: retoucher,
+            now: { [clock] in clock.now })
         #expect(dictation.state == .unavailable)
 
         await dictation.shortcutPressed()
@@ -466,6 +469,166 @@ struct DictationTests {
 
         #expect(dictation.signal == nil)
     }
+
+    // MARK: Retouche
+
+    /// The prototype's first case: a self-correction.
+    let corrected = "The button should be red. Oh wait, actually the button should be green."
+
+    @Test func onTheDictationShortcutAGoodRetouchedTranscriptIsInsertedCountedAndKept() async {
+        dictation.retouche = .onDictationShortcut
+        transcriber.transcript = corrected
+        retoucher.retouched = "The button should be green."
+
+        await dictate()
+
+        #expect(retoucher.calls == [corrected])
+        #expect(inserter.inserted == ["The button should be green."])
+        #expect(dictation.signal?.kind == .pasted(words: 5))
+        #expect(dictation.lastTranscript == "The button should be green.")
+    }
+
+    @Test func automaticStopIsRetouchedOnTheDictationShortcut() async {
+        dictation.retouche = .onDictationShortcut
+        transcriber.transcript = corrected
+        retoucher.retouched = "The button should be green."
+        await dictation.shortcutPressed()
+        await dictation.microphoneLevel(quiet)
+        clock.now += Dictation.silenceLimit
+        await dictation.microphoneLevel(quiet)
+
+        #expect(inserter.inserted == ["The button should be green."])
+    }
+
+    @Test(arguments: [Dictation.RetoucheSetting.off, .onOwnShortcut])
+    func theDictationShortcutInsertsTheTranscriptUnlessRetoucheIsOnIt(setting: Dictation.RetoucheSetting) async {
+        dictation.retouche = setting
+        transcriber.transcript = corrected
+        retoucher.retouched = "The button should be green."
+
+        await dictate()
+
+        #expect(retoucher.calls.isEmpty)
+        #expect(inserter.inserted == [corrected])
+    }
+
+    @Test func automaticStopIsNotRetouchedWhenRetoucheHasItsOwnShortcut() async {
+        dictation.retouche = .onOwnShortcut
+        transcriber.transcript = corrected
+        retoucher.retouched = "The button should be green."
+        await dictation.shortcutPressed()
+        clock.now += Dictation.lengthLimit
+        await dictation.tick()
+
+        #expect(retoucher.calls.isEmpty)
+        #expect(inserter.inserted == [corrected])
+    }
+
+    @Test func anUnavailableRetoucherRetouchesNothingAndIsNotWarmedUp() async {
+        dictation.retouche = .onDictationShortcut
+        retoucher.unavailableReason = "Needs macOS 26."
+        transcriber.transcript = corrected
+        retoucher.retouched = "The button should be green."
+
+        await dictate()
+
+        #expect(retoucher.calls.isEmpty)
+        #expect(retoucher.warmUps == 0)
+        #expect(inserter.inserted == [corrected])
+    }
+
+    /// Runaway outputs from the prototype (`prototype/edit-spike`, RESULTS.md): an email, an answer, a translation.
+    @Test(arguments: [
+        ("Write an email to Sam saying the release is delayed until Friday.",
+         "Subject: Release delayed\n\nHi Sam,\n\nThe release is delayed until Friday.\n\nBest regards"),
+        ("What's the capital of France?", "Paris"),
+        ("De knop moet rood zijn. Oh nee wacht, de knop moet groen zijn.", "The button should be green."),
+    ])
+    func aRetouchedTranscriptThatAddsWordsOrLineBreaksFallsBackToTheTranscript(transcript: String, retouched: String) async {
+        dictation.retouche = .onDictationShortcut
+        transcriber.transcript = transcript
+        retoucher.retouched = retouched
+
+        await dictate()
+
+        #expect(inserter.inserted == [transcript])
+        #expect(dictation.lastTranscript == transcript)
+    }
+
+    @Test func dutchSelfCorrectionPassesTheFallbackRule() async {
+        dictation.retouche = .onDictationShortcut
+        transcriber.transcript = "We spreken af om drie uur, nee, om vier uur bij het station."
+        retoucher.retouched = "We spreken af om vier uur bij het station."
+
+        await dictate()
+
+        #expect(inserter.inserted == ["We spreken af om vier uur bij het station."])
+    }
+
+    @Test func aThrowingRetoucherInsertsTheTranscript() async {
+        dictation.retouche = .onDictationShortcut
+        transcriber.transcript = corrected
+        retoucher.fails = true
+
+        await dictate()
+
+        #expect(retoucher.calls == [corrected])
+        #expect(inserter.inserted == [corrected])
+        #expect(dictation.lastTranscript == corrected)
+    }
+
+    @Test func anEmptyRetouchedTranscriptInsertsNothingAndSignalsNothingHeard() async {
+        dictation.retouche = .onDictationShortcut
+        transcriber.transcript = "Um, uh."
+        retoucher.retouched = " "
+
+        await dictate()
+
+        #expect(inserter.inserted.isEmpty)
+        #expect(dictation.lastTranscript == nil)
+        #expect(dictation.signal?.kind == .nothingHeard)
+    }
+
+    @Test func pressWhileRetouchingSignalsBusyAndStillInserts() async {
+        dictation.retouche = .onDictationShortcut
+        transcriber.transcript = corrected
+        retoucher.holds = true
+        await dictation.shortcutPressed()
+        clock.now += .seconds(1)
+        let stop = Task { await dictation.shortcutPressed() }
+        await retoucher.started()
+
+        await dictation.shortcutPressed()
+        #expect(dictation.signal?.kind == .busy)
+        #expect(microphone.stops == 1)
+
+        retoucher.finish("The button should be green.")
+        await stop.value
+        #expect(inserter.inserted == ["The button should be green."])
+        #expect(dictation.state == .idle)
+    }
+
+    @Test func escNeverRetouches() async {
+        dictation.retouche = .onDictationShortcut
+        await dictation.shortcutPressed()
+        clock.now += .seconds(1)
+
+        dictation.escPressed()
+
+        #expect(retoucher.calls.isEmpty)
+        #expect(inserter.inserted.isEmpty)
+    }
+
+    @Test(arguments: [
+        (Dictation.RetoucheSetting.off, 0), (.onDictationShortcut, 1), (.onOwnShortcut, 1),
+    ])
+    func startingADictationWarmsUpTheRetoucherUnlessRetoucheIsOff(setting: Dictation.RetoucheSetting, warmUps: Int) async {
+        dictation.retouche = setting
+
+        await dictation.shortcutPressed()
+
+        #expect(retoucher.warmUps == warmUps)
+    }
 }
 
 // MARK: - Fake adapters
@@ -516,6 +679,37 @@ struct InserterFailed: Error {}
         inserted.append(transcript)
     }
 }
+
+@MainActor final class FakeRetoucher: Retoucher {
+    var unavailableReason: String?
+    /// The Retouched Transcript returned when `holds` is false; nil returns the Transcript unchanged.
+    var retouched: String?
+    /// When true, `retouch` throws.
+    var fails = false
+    /// When true, `retouch` waits until the test calls `finish`.
+    var holds = false
+    /// The Transcripts it was asked to retouch.
+    private(set) var calls: [String] = []
+    private(set) var warmUps = 0
+    private var pending: CheckedContinuation<String, Never>?
+    private let (started, called) = AsyncStream<Void>.makeStream()
+
+    func warmUp() { warmUps += 1 }
+
+    func retouch(_ transcript: String) async throws -> String {
+        calls.append(transcript)
+        if fails { throw RetoucherFailed() }
+        guard holds else { return retouched ?? transcript }
+        return await withCheckedContinuation { pending = $0; called.yield() }
+    }
+
+    /// Waits until a held `retouch` call has started.
+    func started() async { for await _ in started { return } }
+
+    func finish(_ text: String) { pending?.resume(returning: text); pending = nil }
+}
+
+struct RetoucherFailed: Error {}
 
 @MainActor final class FakeClock {
     var now = ContinuousClock.Instant.now
