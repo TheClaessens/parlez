@@ -14,11 +14,11 @@ Existing signals keep working as they do today until tickets 02 and 03 replace t
 
 **Status:** ready-for-agent
 
-- [ ] The Dictation core exposes when the current Recording started, set while recording and cleared after, covered by Dictation tests.
-- [ ] The Island layout frame matches the spec's sizes on a screen with a notch and without one, and the layout tests assert the new frames.
-- [ ] While recording, the Island shows the dot, the running elapsed time and a level-driven waveform beside the notch at notch height.
-- [ ] While transcribing, it keeps that shape and shows the spinner, the frozen time and the shimmer.
-- [ ] The menu bar icon is red while recording and normal otherwise.
-- [ ] On a screen without a notch the floating pill shows the same content.
-- [ ] The README hand-check checklist's Island and level meter lines describe the new look.
+- [x] The Dictation core exposes when the current Recording started, set while recording and cleared after, covered by Dictation tests.
+- [x] The Island layout frame matches the spec's sizes on a screen with a notch and without one, and the layout tests assert the new frames.
+- [x] While recording, the Island shows the dot, the running elapsed time and a level-driven waveform beside the notch at notch height.
+- [x] While transcribing, it keeps that shape and shows the spinner, the frozen time and the shimmer.
+- [x] The menu bar icon is red while recording and normal otherwise.
+- [x] On a screen without a notch the floating pill shows the same content.
+- [x] The README hand-check checklist's Island and level meter lines describe the new look.
 - [ ] By hand: checked on the built-in display and on an external display as main.

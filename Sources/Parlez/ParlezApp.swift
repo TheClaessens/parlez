@@ -43,7 +43,7 @@ struct ParlezApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra("Parlez", systemImage: "waveform") {
+        MenuBarExtra {
             SettingsMenuItem()
             Button("Copy last Transcript") {
                 if let transcript = dictation.lastTranscript { PasteInserter.copy(transcript) }
@@ -52,8 +52,25 @@ struct ParlezApp: App {
             Divider()
             Button("Quit Parlez") { NSApplication.shared.terminate(nil) }
                 .keyboardShortcut("q")
+        } label: {
+            MenuBarIcon(dictation: dictation)
         }
         Settings { SettingsView() }
+    }
+}
+
+/// The menu bar icon, red while recording.
+struct MenuBarIcon: View {
+    let dictation: Dictation
+
+    var body: some View {
+        // The menu bar draws images as monochrome templates, so the red one is an NSImage that opts out.
+        let image = NSImage(systemSymbolName: "waveform", accessibilityDescription: "Parlez")!
+        if dictation.state == .recording, let red = image.withSymbolConfiguration(.init(paletteColors: [.systemRed])) {
+            red.isTemplate = false
+            return Image(nsImage: red)
+        }
+        return Image(nsImage: image)
     }
 }
 

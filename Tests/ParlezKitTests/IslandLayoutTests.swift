@@ -13,7 +13,7 @@ struct IslandLayoutTests {
             topRightArea: CGRect(x: 866, y: 944, width: 646, height: 38))
 
         #expect(layout.notch == CGSize(width: 220, height: 38))
-        #expect(layout.frame == CGRect(x: 626, y: 908, width: 260, height: 74))
+        #expect(layout.frame == CGRect(x: 541, y: 892, width: 430, height: 90))
     }
 
     @Test func floatsAtTheTopCentreOfAScreenWithoutANotch() {
@@ -26,6 +26,6 @@ struct IslandLayoutTests {
             topRightArea: nil)
 
         #expect(layout.notch == nil)
-        #expect(layout.frame == CGRect(x: 2362, y: 1013, width: 220, height: 36))
+        #expect(layout.frame == CGRect(x: 2316, y: 997, width: 312, height: 52))
     }
 }

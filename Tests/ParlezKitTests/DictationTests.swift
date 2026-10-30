@@ -130,6 +130,27 @@ struct DictationTests {
         #expect(dictation.level == 0)
     }
 
+    @Test func recordingStartedAtIsSetWhileRecordingOnly() async {
+        #expect(dictation.recordingStartedAt == nil)
+
+        let start = clock.now
+        await dictation.shortcutPressed()
+        clock.now += .seconds(1)
+        await dictation.microphoneLevel(speech)
+        #expect(dictation.recordingStartedAt == start)
+
+        transcriber.holds = true
+        let stop = Task { await dictation.shortcutPressed() }
+        await transcriber.started()
+        #expect(dictation.recordingStartedAt == nil)
+
+        transcriber.finish("Klaar.")
+        await stop.value
+        await dictation.shortcutPressed()
+        dictation.escPressed()
+        #expect(dictation.recordingStartedAt == nil)
+    }
+
     @Test func thirtySecondsOfSilenceStopsAndInserts() async {
         transcriber.transcript = "Vergeten."
         await dictation.shortcutPressed()

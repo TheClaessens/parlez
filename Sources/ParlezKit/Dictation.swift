@@ -44,12 +44,14 @@ public final class Dictation {
             let recording = state == .recording
             guard recording != (oldValue == .recording) else { return }
             // However a recording ends (stop, automatic stop, Esc), drop its silence/length tracking.
-            if !recording { silentSince = nil; startedAt = nil; level = 0 }
+            if !recording { silentSince = nil; recordingStartedAt = nil; level = 0 }
             onRecordingChanged?(recording)
         }
     }
-    /// The latest Microphone level while recording (for the Island's meter); 0 otherwise.
+    /// The latest Microphone level while recording (for the Island's waveform); 0 otherwise.
     public private(set) var level: Float = 0
+    /// When the current Recording started (for the Island's elapsed time); nil while not recording.
+    public private(set) var recordingStartedAt: ContinuousClock.Instant?
     /// Called with true when a Dictation starts recording and false when it leaves recording, however it ends.
     /// The app registers Esc as the cancel shortcut only in between.
     @ObservationIgnored public var onRecordingChanged: (@MainActor (Bool) -> Void)?
@@ -67,7 +69,6 @@ public final class Dictation {
     /// Reads the current instant (injected so tests control time), for the silence and length limits
     /// and the 0.3 s minimum.
     private let now: @MainActor () -> ContinuousClock.Instant
-    private var startedAt: ContinuousClock.Instant?
     /// When the current run of readings below `silenceThreshold` began; nil while there is sound.
     private var silentSince: ContinuousClock.Instant?
 
@@ -94,7 +95,7 @@ public final class Dictation {
         switch state {
         case .idle:
             guard (try? microphone.start()) != nil else { return raise(.error("Microphone didn't start")) }
-            startedAt = now()
+            recordingStartedAt = now()
             signal = nil
             state = .recording
         case .recording:
@@ -129,17 +130,17 @@ public final class Dictation {
     /// Time passing: the app calls this on a timer while recording, so the automatic stops still
     /// happen when the Microphone stalls and sends no readings.
     public func tick() async {
-        guard state == .recording, let startedAt else { return }
+        guard state == .recording, let recordingStartedAt else { return }
         let now = now()
         let silentTooLong = silentSince.map { now - $0 >= Self.silenceLimit } ?? false
-        if silentTooLong || now - startedAt >= Self.lengthLimit { await stop() }
+        if silentTooLong || now - recordingStartedAt >= Self.lengthLimit { await stop() }
     }
 
     /// Every stop, manual or automatic, goes through here: drop an accidental tap, otherwise
     /// transcribe the Recording and insert a non-empty Transcript.
     private func stop() async {
         let recording = microphone.stop()
-        guard let startedAt, now() - startedAt >= Self.minimumRecording else {
+        guard let recordingStartedAt, now() - recordingStartedAt >= Self.minimumRecording else {
             state = .idle
             return
         }
